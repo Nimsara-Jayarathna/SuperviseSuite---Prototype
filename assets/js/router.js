@@ -2,9 +2,9 @@
   var listeners = [];
 
   function normalizeHash() {
-    var hash = location.hash || "#/login";
+    var hash = location.hash || "#/";
     if (!hash.startsWith("#/")) {
-      return "#/login";
+      return "#/";
     }
     return hash;
   }
@@ -31,7 +31,7 @@
     }
 
     if (clean === "") {
-      route.path = "/dashboard";
+      route.path = "/";
     }
 
     return route;
@@ -56,7 +56,7 @@
     window.addEventListener("hashchange", notify);
     window.addEventListener("load", function () {
       if (!location.hash) {
-        location.hash = "#/login";
+        location.hash = "#/";
       }
       notify();
     });

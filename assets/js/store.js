@@ -28,6 +28,25 @@
     if (!db || !db.users || !db.projects) {
       db = window.Seed.generateSeedData();
       saveDB(db);
+    } else {
+      var dirty = false;
+      db.users.forEach(function (u) {
+        if (!u.name && u.fullName) {
+          u.name = u.fullName;
+          dirty = true;
+        }
+        if (!u.fullName && u.name) {
+          u.fullName = u.name;
+          dirty = true;
+        }
+        if (!u.createdAt) {
+          u.createdAt = new Date().toISOString();
+          dirty = true;
+        }
+      });
+      if (dirty) {
+        saveDB(db);
+      }
     }
     return db;
   }
@@ -45,7 +64,16 @@
   }
 
   function setSession(session) {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    var now = new Date().toISOString();
+    var normalized = {
+      userId: session && session.userId ? session.userId : null,
+      role: session && session.role ? session.role : null,
+      createdAt: session && session.createdAt ? session.createdAt : now,
+      lastActiveAt: session && session.lastActiveAt ? session.lastActiveAt : now,
+      returnTo: session && session.returnTo ? session.returnTo : null
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(normalized));
+    return clone(normalized);
   }
 
   function clearSession() {
@@ -58,23 +86,80 @@
 
   function login(email, password) {
     var db = init();
+    var existing = getSession();
     var user = db.users.find(function (u) {
       return u.email.toLowerCase() === email.toLowerCase() && u.password === password;
     });
     if (!user) {
       return null;
     }
-    var session = { userId: user.id, role: user.role, loggedAt: new Date().toISOString() };
-    setSession(session);
-    return session;
+    var now = new Date().toISOString();
+    return setSession({
+      userId: user.id,
+      role: user.role,
+      createdAt: now,
+      lastActiveAt: now,
+      returnTo: existing && existing.returnTo ? existing.returnTo : null
+    });
   }
 
   function getCurrentUser() {
     var session = getSession();
-    if (!session) {
+    if (!session || !session.userId) {
       return null;
     }
     return getUserById(session.userId);
+  }
+
+  function emailExists(email) {
+    if (!email) {
+      return false;
+    }
+    var normalized = String(email).trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    return init().users.some(function (u) {
+      return String(u.email || "").toLowerCase() === normalized;
+    });
+  }
+
+  function registerUser(payload) {
+    var db = init();
+    var fullName = String(payload.fullName || payload.full_name || "").trim();
+    var email = String(payload.email || "").trim().toLowerCase();
+    var password = String(payload.password || "");
+    var role = payload.role === "SUPERVISOR" ? "SUPERVISOR" : "STUDENT";
+
+    if (!fullName || !email || !password) {
+      return { ok: false, error: "Missing required fields" };
+    }
+
+    if (emailExists(email)) {
+      return { ok: false, error: "Email already registered" };
+    }
+
+    var rec = {
+      id: "u_reg_" + Date.now(),
+      name: fullName,
+      fullName: fullName,
+      email: email,
+      password: password,
+      role: role,
+      createdAt: new Date().toISOString()
+    };
+    db.users.push(rec);
+    saveDB(db);
+    return { ok: true, user: clone(rec) };
+  }
+
+  function touchSession() {
+    var session = getSession();
+    if (!session || !session.userId) {
+      return null;
+    }
+    session.lastActiveAt = new Date().toISOString();
+    return setSession(session);
   }
 
   function getProjectsForUser(user) {
@@ -304,7 +389,10 @@
     getSession: getSession,
     setSession: setSession,
     clearSession: clearSession,
+    touchSession: touchSession,
     login: login,
+    emailExists: emailExists,
+    registerUser: registerUser,
     getCurrentUser: getCurrentUser,
     getUserById: getUserById,
     getProjectsForUser: getProjectsForUser,

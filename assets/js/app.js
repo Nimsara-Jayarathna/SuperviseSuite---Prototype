@@ -1,11 +1,16 @@
 (function () {
+  var SESSION_TIMEOUT_MS = 1000 * 60 * 60 * 6;
   var state = {
     user: null,
     route: null,
-    search: ""
+    search: "",
+    ui: {
+      sidebarOpen: false
+    }
   };
 
-  var supervisorOnly = ["/dashboard", "/projects", "/projects/new"];
+  var publicPaths = ["/", "/login", "/register"];
+  var supervisorOnly = ["/dashboard", "/projects/new"];
 
   function el(id) {
     return document.getElementById(id);
@@ -17,6 +22,71 @@
 
   function byId(arr, id) {
     return arr.find(function (x) { return x.id === id; });
+  }
+
+  function isPublicRoute(path) {
+    return publicPaths.indexOf(path) > -1;
+  }
+
+  function roleHome(role) {
+    return role === "SUPERVISOR" ? "#/dashboard" : "#/student";
+  }
+
+  function getSessionState() {
+    var session = Store.getSession();
+    var authenticated = !!(session && session.userId && session.role);
+    return { session: session, authenticated: authenticated };
+  }
+
+  function isSessionExpired(session) {
+    if (!session || !session.userId || !session.lastActiveAt) {
+      return false;
+    }
+    return new Date().getTime() - new Date(session.lastActiveAt).getTime() > SESSION_TIMEOUT_MS;
+  }
+
+  function clearReturnTo(session) {
+    if (!session || !session.userId) {
+      return;
+    }
+    session.returnTo = null;
+    Store.setSession(session);
+  }
+
+  function consumeReturnTo(session) {
+    if (!session || !session.returnTo) {
+      return null;
+    }
+    var target = session.returnTo;
+    clearReturnTo(session);
+    return target;
+  }
+
+  function rememberReturnTo(rawRoute) {
+    var target = rawRoute || location.hash || "#/";
+    if (!target.startsWith("#/")) {
+      target = "#/";
+    }
+    var session = Store.getSession() || {};
+    session.returnTo = target;
+    Store.setSession(session);
+  }
+
+  function toggleSidebar(open) {
+    var shell = el("app-shell");
+    var overlay = el("shell-overlay");
+    state.ui.sidebarOpen = !!open;
+
+    if (!shell || !overlay) {
+      return;
+    }
+
+    shell.classList.toggle("sidebar-open", state.ui.sidebarOpen);
+    overlay.classList.toggle("hidden", !state.ui.sidebarOpen);
+  }
+
+  function closeSidebar() {
+    toggleSidebar(false);
   }
 
   function sidebarHtml() {
@@ -50,25 +120,45 @@
       return "";
     }
 
-    return '<div class="search-wrap"><input class="search-input" id="global-search" placeholder="Search projects or students" value="' + UI.escapeHtml(state.search) + '"/></div>' +
+    return '<div class="topbar-left"><button class="btn ghost small menu-btn" id="menu-toggle" aria-label="Toggle menu">Menu</button><div class="search-wrap"><input class="search-input" id="global-search" placeholder="Search projects or students" value="' + UI.escapeHtml(state.search) + '"/></div></div>' +
       '<div class="topbar-right"><span class="meta">' + UI.escapeHtml(state.user.role) + '</span><strong>' + UI.escapeHtml(state.user.name) + '</strong><button class="btn small" id="logout-btn">Logout</button></div>';
   }
 
   function enforceRouteGuards(route) {
-    var session = Store.getSession();
-    if (!session && route.path !== "/login") {
+    var ss = getSessionState();
+    var session = ss.session;
+
+    if (ss.authenticated && isSessionExpired(session)) {
+      Store.clearSession();
+      state.user = null;
+      UI.toast("Session expired");
       Router.go("#/login");
       return false;
     }
 
-    if (session) {
-      state.user = Store.getCurrentUser();
-    } else {
-      state.user = null;
+    if (!ss.authenticated && !isPublicRoute(route.path)) {
+      rememberReturnTo(route.raw);
+      Router.go("#/login");
+      return false;
     }
 
-    if (!session) {
+    if (!ss.authenticated) {
+      state.user = null;
       return true;
+    }
+
+    state.user = Store.getCurrentUser();
+    if (!state.user) {
+      Store.clearSession();
+      Router.go("#/login");
+      return false;
+    }
+
+    Store.touchSession();
+
+    if (route.path === "/" || route.path === "/login" || route.path === "/register") {
+      Router.go(roleHome(state.user.role));
+      return false;
     }
 
     if (state.user.role === "STUDENT" && supervisorOnly.indexOf(route.path) > -1) {
@@ -95,6 +185,7 @@
   function bindShellEvents() {
     document.querySelectorAll("[data-nav]").forEach(function (button) {
       button.addEventListener("click", function () {
+        closeSidebar();
         Router.go(button.getAttribute("data-nav"));
       });
     });
@@ -103,8 +194,10 @@
     if (logout) {
       logout.addEventListener("click", function () {
         Store.clearSession();
+        state.user = null;
+        closeSidebar();
         UI.toast("Logged out");
-        Router.go("#/login");
+        Router.go("#/");
       });
     }
 
@@ -115,16 +208,34 @@
         renderCurrentRoute();
       });
     }
+
+    var menu = el("menu-toggle");
+    if (menu) {
+      menu.addEventListener("click", function () {
+        toggleSidebar(!state.ui.sidebarOpen);
+      });
+    }
+
+    var overlay = el("shell-overlay");
+    if (overlay) {
+      overlay.onclick = function () {
+        closeSidebar();
+      };
+    }
   }
 
   function renderLayout(contentHtml) {
     var shell = el("app-shell");
-    if (!state.user && state.route.path === "/login") {
-      shell.classList.add("login-shell");
+    var path = state.route ? state.route.path : "";
+    var isPublicShell = !state.user && isPublicRoute(path);
+
+    shell.classList.toggle("public-shell", isPublicShell);
+
+    if (isPublicShell) {
       el("sidebar").classList.add("hidden");
       el("topbar").classList.add("hidden");
+      closeSidebar();
     } else {
-      shell.classList.remove("login-shell");
       el("sidebar").classList.remove("hidden");
       el("topbar").classList.remove("hidden");
     }
@@ -133,6 +244,62 @@
     el("topbar").innerHTML = topbarHtml();
     el("content").innerHTML = contentHtml;
     bindShellEvents();
+  }
+
+  function loginWithCredentials(email, password) {
+    var session = Store.login(email, password);
+    if (!session) {
+      return null;
+    }
+    var returnTo = consumeReturnTo(session);
+    return returnTo || roleHome(session.role);
+  }
+
+  function renderLanding() {
+    renderLayout(
+      '<section class="landing">' +
+      '<div class="card landing-hero">' +
+      '<h1 class="page-title">SuperviseSuite</h1>' +
+      '<p class="landing-tagline">Track project portfolios, meetings, action items, and progress insights in one supervisor workspace.</p>' +
+      '<div class="row wrap" style="margin-top:14px">' +
+      '<button class="btn primary" id="landing-login">Login</button>' +
+      '<button class="btn" id="landing-register">Register</button>' +
+      '</div></div>' +
+      '<div class="grid cards-4" style="margin-top:14px">' +
+      '<div class="card"><div class="metric-label">Role-Based Access</div><div class="meta">Supervisor and student views with centralized route guards.</div></div>' +
+      '<div class="card"><div class="metric-label">Project Workspace</div><div class="meta">Overview, activity, meetings, action items, and files metadata tabs.</div></div>' +
+      '<div class="card"><div class="metric-label">Monitoring Widgets</div><div class="meta">Dashboard metrics, project health table, and mock trend charts.</div></div>' +
+      '<div class="card"><div class="metric-label">Simulation Layer</div><div class="meta">Mock integrations for GitHub/Jira and async-like interactions.</div></div>' +
+      '</div>' +
+      '<div class="card" style="margin-top:14px">' +
+      '<h3 style="margin:0 0 10px">Quick Demo Access</h3>' +
+      '<div class="row wrap">' +
+      '<button class="btn" data-demo-login="supervisor@demo.com">Supervisor Demo</button>' +
+      '<button class="btn" data-demo-login="student1@demo.com">Student 1 Demo</button>' +
+      '<button class="btn" data-demo-login="student2@demo.com">Student 2 Demo</button>' +
+      '</div></div>' +
+      '<div class="notice" style="margin-top:12px">Prototype disclaimer: this build runs entirely on localStorage, integrations are simulated, and file uploads store metadata only.</div>' +
+      '</section>'
+    );
+
+    el("landing-login").addEventListener("click", function () {
+      Router.go("#/login");
+    });
+    el("landing-register").addEventListener("click", function () {
+      Router.go("#/register");
+    });
+
+    document.querySelectorAll("[data-demo-login]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var target = loginWithCredentials(btn.getAttribute("data-demo-login"), "demo123");
+        if (!target) {
+          UI.toast("Demo login failed");
+          return;
+        }
+        UI.toast("Login successful");
+        Router.go(target);
+      });
+    });
   }
 
   function renderLogin() {
@@ -149,8 +316,8 @@
       '<div class="full"><label>Email</label><input id="login-email" value="supervisor@demo.com"/></div>' +
       '<div class="full"><label>Password</label><input id="login-password" type="password" value="demo123"/></div>' +
       "</div>" +
-      '<div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn primary" id="login-submit">Login</button></div>' +
-      '<p class="notice">All accounts use password: <strong>demo123</strong></p>' +
+      '<div class="row" style="justify-content:space-between;margin-top:10px"><a href="#/register" class="btn ghost">Create account</a><button class="btn primary" id="login-submit">Login</button></div>' +
+      '<p class="notice">All seeded demo accounts use password: <strong>demo123</strong></p>' +
       "</div>"
     );
 
@@ -164,13 +331,117 @@
     el("login-submit").addEventListener("click", function () {
       var email = el("login-email").value.trim();
       var password = el("login-password").value.trim();
-      var session = Store.login(email, password);
-      if (!session) {
+      var target = loginWithCredentials(email, password);
+      if (!target) {
         UI.toast("Invalid credentials");
         return;
       }
       UI.toast("Login successful");
-      Router.go(session.role === "SUPERVISOR" ? "#/dashboard" : "#/student");
+      Router.go(target);
+    });
+  }
+
+  function renderRegister() {
+    var submitting = false;
+
+    renderLayout(
+      '<div class="login-wrap card">' +
+      title("Create Account") +
+      '<p class="notice">New registrations create student accounts for this local prototype.</p>' +
+      '<div class="form-grid">' +
+      '<div class="full"><label>Full Name</label><input id="reg-name" placeholder="Your full name"/><div class="field-error" id="reg-name-err"></div></div>' +
+      '<div class="full"><label>Email</label><input id="reg-email" placeholder="name@example.com"/><div class="field-error" id="reg-email-err"></div></div>' +
+      '<div><label>Password</label><input id="reg-password" type="password"/><div class="field-error" id="reg-password-err"></div></div>' +
+      '<div><label>Confirm Password</label><input id="reg-confirm" type="password"/><div class="field-error" id="reg-confirm-err"></div></div>' +
+      '<div class="full"><label>Role</label><select id="reg-role"><option value="STUDENT">Student</option></select></div>' +
+      '</div>' +
+      '<div class="row" style="justify-content:space-between;margin-top:12px"><a href="#/login" class="btn ghost">Back to login</a><button class="btn primary" id="reg-submit">Register</button></div>' +
+      '</div>'
+    );
+
+    function setError(id, message) {
+      var node = el(id);
+      if (node) {
+        node.textContent = message || "";
+      }
+    }
+
+    function clearErrors() {
+      setError("reg-name-err", "");
+      setError("reg-email-err", "");
+      setError("reg-password-err", "");
+      setError("reg-confirm-err", "");
+    }
+
+    function validate(payload) {
+      clearErrors();
+      var ok = true;
+      var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+      if (!payload.fullName) {
+        setError("reg-name-err", "Full name is required.");
+        ok = false;
+      }
+      if (!payload.email) {
+        setError("reg-email-err", "Email is required.");
+        ok = false;
+      } else if (!emailRegex.test(payload.email)) {
+        setError("reg-email-err", "Enter a valid email address.");
+        ok = false;
+      } else if (Store.emailExists(payload.email)) {
+        setError("reg-email-err", "This email is already in use.");
+        ok = false;
+      }
+      if (!payload.password) {
+        setError("reg-password-err", "Password is required.");
+        ok = false;
+      } else if (payload.password.length < 8) {
+        setError("reg-password-err", "Password must be at least 8 characters.");
+        ok = false;
+      }
+      if (payload.confirmPassword !== payload.password) {
+        setError("reg-confirm-err", "Passwords do not match.");
+        ok = false;
+      }
+
+      return ok;
+    }
+
+    el("reg-submit").addEventListener("click", function () {
+      if (submitting) {
+        return;
+      }
+
+      var payload = {
+        fullName: el("reg-name").value.trim(),
+        email: el("reg-email").value.trim(),
+        password: el("reg-password").value,
+        confirmPassword: el("reg-confirm").value,
+        role: el("reg-role").value
+      };
+
+      if (!validate(payload)) {
+        return;
+      }
+
+      submitting = true;
+      el("reg-submit").disabled = true;
+      el("reg-submit").textContent = "Creating...";
+
+      Store.simulate({}, 500).then(function () {
+        var result = Store.registerUser(payload);
+        if (!result.ok) {
+          submitting = false;
+          el("reg-submit").disabled = false;
+          el("reg-submit").textContent = "Register";
+          setError("reg-email-err", result.error || "Registration failed.");
+          return;
+        }
+
+        var target = loginWithCredentials(payload.email, payload.password);
+        UI.toast("Registration successful");
+        Router.go(target || "#/student");
+      });
     });
   }
 
@@ -771,8 +1042,18 @@
       return;
     }
 
+    if (state.route.path === "/") {
+      renderLanding();
+      return;
+    }
+
     if (state.route.path === "/login") {
       renderLogin();
+      return;
+    }
+
+    if (state.route.path === "/register") {
+      renderRegister();
       return;
     }
 
@@ -801,7 +1082,7 @@
       return;
     }
 
-    Router.go(state.user && state.user.role === "STUDENT" ? "#/student" : "#/dashboard");
+    Router.go(state.user && state.user.role === "STUDENT" ? "#/student" : "#/");
   }
 
   function boot() {
