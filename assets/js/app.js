@@ -9,7 +9,7 @@
     }
   };
 
-  var publicPaths = ["/", "/login", "/register"];
+  var publicPaths = ["/", "/login", "/register", "/BAchecklist"];
   var supervisorOnly = ["/dashboard", "/projects/new"];
 
   function el(id) {
@@ -300,9 +300,11 @@
   function renderLayout(contentHtml) {
     var shell = el("app-shell");
     var path = state.route ? state.route.path : "";
-    var isPublicShell = !state.user && isPublicRoute(path);
+    var isPublicDocShell = path === "/BAchecklist";
+    var isPublicShell = (!state.user && isPublicRoute(path)) || isPublicDocShell;
 
     shell.classList.toggle("public-shell", isPublicShell);
+    shell.classList.toggle("public-doc-shell", isPublicDocShell);
 
     if (isPublicShell) {
       el("sidebar").classList.add("hidden");
@@ -337,6 +339,7 @@
       '<div class="row wrap" style="margin-top:14px">' +
       '<button class="btn primary" id="landing-login">Login</button>' +
       '<button class="btn" id="landing-register">Register</button>' +
+      '<button class="btn ghost" id="landing-ba">BA Checklist</button>' +
       '</div></div>' +
       '<div class="grid cards-4" style="margin-top:14px">' +
       '<div class="card"><div class="metric-label">Role-Based Access</div><div class="meta">Supervisor and student views with centralized route guards.</div></div>' +
@@ -360,6 +363,9 @@
     });
     el("landing-register").addEventListener("click", function () {
       Router.go("#/register");
+    });
+    el("landing-ba").addEventListener("click", function () {
+      Router.go("#/BAchecklist");
     });
 
     document.querySelectorAll("[data-demo-login]").forEach(function (btn) {
@@ -1322,6 +1328,339 @@
     bindOpenProjectButtons();
   }
 
+  function renderFinalizePage() {
+    var modules = ["AUTH_SESSION", "ROLES_PERMISSIONS", "PROJECT_LIFECYCLE", "MEETINGS", "ACTION_ITEMS", "DASHBOARD_KPIS", "FILES", "INTEGRATIONS", "REPORTING_EXPORT"];
+    var statuses = ["OPEN", "DISCUSSING", "DECIDED", "DEFERRED"];
+    var isSupervisor = state.user && state.user.role === "SUPERVISOR";
+    var viewState = {
+      query: "",
+      module: "",
+      priority: "",
+      statusFilters: ["OPEN", "DISCUSSING", "DECIDED", "DEFERRED"],
+      expandedItemId: null
+    };
+
+    function groupedCounts(items, module) {
+      var rows = items.filter(function (x) { return x.module === module; });
+      return {
+        total: rows.length,
+        open: rows.filter(function (x) { return x.status === "OPEN"; }).length,
+        discussing: rows.filter(function (x) { return x.status === "DISCUSSING"; }).length,
+        decided: rows.filter(function (x) { return x.status === "DECIDED"; }).length,
+        deferred: rows.filter(function (x) { return x.status === "DEFERRED"; }).length
+      };
+    }
+
+    function matchesFilter(item) {
+      var q = viewState.query.toLowerCase();
+      var inSearch = !q || item.title.toLowerCase().indexOf(q) > -1 || item.businessIntent.toLowerCase().indexOf(q) > -1 || item.currentImplementation.toLowerCase().indexOf(q) > -1;
+      var inModule = !viewState.module || item.module === viewState.module;
+      var inPriority = !viewState.priority || item.priority === viewState.priority;
+      var inStatus = viewState.statusFilters.indexOf(item.status) > -1;
+      return inSearch && inModule && inPriority && inStatus;
+    }
+
+    function renderItemDetail(item) {
+      var lastBy = item.updatedByUserId ? Store.getUserById(item.updatedByUserId) : null;
+      var readOnly = !isSupervisor;
+      var altList = item.alternatives.length ? "<ul>" + item.alternatives.map(function (a) { return "<li>" + UI.escapeHtml(a) + "</li>"; }).join("") + "</ul>" : '<div class="meta">No alternatives listed.</div>';
+      return '<div class="finalize-detail">' +
+        '<div class="finalize-detail-grid">' +
+        '<div><h4>Business intent</h4><p>' + UI.escapeHtml(item.businessIntent || "-") + '</p></div>' +
+        '<div><h4>Current implementation</h4><p>' + UI.escapeHtml(item.currentImplementation || "-") + '</p></div>' +
+        '<div><h4>Risk prevented</h4><p>' + UI.escapeHtml(item.riskPrevented || "-") + '</p></div>' +
+        '<div><h4>Alternatives</h4>' + altList + '</div>' +
+        '</div>' +
+        '<div class="finalize-decision-row">' +
+        '<div class="form-grid">' +
+        '<div><label>Status</label><select data-fin-status="' + item.id + '" ' + (readOnly ? "disabled" : "") + '>' + statuses.map(function (s) { return '<option ' + (item.status === s ? "selected" : "") + ">" + s + "</option>"; }).join("") + "</select></div>" +
+        '<div><label>Priority</label><select data-fin-priority="' + item.id + '" ' + (readOnly ? "disabled" : "") + '><option ' + (item.priority === "MUST" ? "selected" : "") + '>MUST</option><option ' + (item.priority === "SHOULD" ? "selected" : "") + '>SHOULD</option><option ' + (item.priority === "COULD" ? "selected" : "") + '>COULD</option></select></div>' +
+        '<div><label>Impact</label><select data-fin-impact="' + item.id + '" ' + (readOnly ? "disabled" : "") + '><option ' + (item.impact === "HIGH" ? "selected" : "") + '>HIGH</option><option ' + (item.impact === "MEDIUM" ? "selected" : "") + '>MEDIUM</option><option ' + (item.impact === "LOW" ? "selected" : "") + '>LOW</option></select></div>' +
+        '<div><label>Owner</label><select data-fin-owner="' + item.id + '" ' + (readOnly ? "disabled" : "") + '><option ' + (item.owner === "CLIENT" ? "selected" : "") + '>CLIENT</option><option ' + (item.owner === "TEAM" ? "selected" : "") + '>TEAM</option></select></div>' +
+        '<div class="full"><label>Client decision</label><textarea rows="3" data-fin-decision="' + item.id + '" ' + (readOnly ? "readonly" : "") + ' placeholder="Document the agreed decision...">' + UI.escapeHtml(item.clientDecision || "") + "</textarea></div>" +
+        '</div>' +
+        (readOnly ? '<div class="notice">Read-only for student role.</div>' : '<div class="row wrap"><button class="btn small" data-fin-save="' + item.id + '">Save</button><button class="btn small primary" data-fin-decide="' + item.id + '">Mark Decided</button><button class="btn small ghost" data-fin-delete="' + item.id + '">Delete</button></div>') +
+        '</div>' +
+        '<div class="meta finalize-meta">Last updated: ' + UI.formatDateTime(item.updatedAt) + (lastBy ? " by " + UI.escapeHtml(lastBy.name) : "") + "</div>" +
+        '</div>';
+    }
+
+    function buildExport(format, filtered) {
+      return Store.exportFinalizeItems(format, filtered);
+    }
+
+    function copyText(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      }
+      return Promise.reject(new Error("Clipboard unavailable"));
+    }
+
+    function openAddModal() {
+      UI.openModal(
+        "Add Finalize Item",
+        '<div class="form-grid">' +
+        '<div><label>Module</label><select id="fin-new-module">' + modules.map(function (m) { return "<option>" + m + "</option>"; }).join("") + '</select></div>' +
+        '<div><label>Title</label><input id="fin-new-title" placeholder="Short requirement title" /></div>' +
+        '<div class="full"><label>Business intent</label><textarea id="fin-new-intent" rows="2"></textarea></div>' +
+        '<div class="full"><label>Current implementation</label><textarea id="fin-new-current" rows="2"></textarea></div>' +
+        '<div class="full"><label>Risk prevented</label><textarea id="fin-new-risk" rows="2"></textarea></div>' +
+        '<div class="full"><label>Alternatives (comma-separated)</label><input id="fin-new-alt" placeholder="Alternative A, Alternative B" /></div>' +
+        '<div><label>Priority</label><select id="fin-new-priority"><option>MUST</option><option>SHOULD</option><option>COULD</option></select></div>' +
+        '<div><label>Impact</label><select id="fin-new-impact"><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></div>' +
+        '</div>',
+        '<button class="btn primary" id="fin-new-save">Add Item</button>'
+      );
+      el("fin-new-save").addEventListener("click", function () {
+        var payload = {
+          module: el("fin-new-module").value,
+          title: el("fin-new-title").value.trim(),
+          businessIntent: el("fin-new-intent").value.trim(),
+          currentImplementation: el("fin-new-current").value.trim(),
+          riskPrevented: el("fin-new-risk").value.trim(),
+          alternatives: el("fin-new-alt").value.split(",").map(function (x) { return x.trim(); }).filter(Boolean),
+          priority: el("fin-new-priority").value,
+          impact: el("fin-new-impact").value
+        };
+        var result = Store.addFinalizeItem(payload, state.user);
+        if (!result.ok) {
+          UI.toast(result.message || "Unable to add item.");
+          return;
+        }
+        UI.closeModal();
+        UI.toast("Finalize item added.");
+        renderPage();
+      });
+    }
+
+    function renderPage() {
+      var allItems = Store.getFinalizeItems();
+      var stats = Store.getFinalizeStats();
+      var filtered = allItems.filter(matchesFilter);
+      var hasAnyItems = allItems.length > 0;
+      var groupedHtml = modules.map(function (module) {
+        var rows = filtered.filter(function (item) { return item.module === module; });
+        if (!rows.length) {
+          return "";
+        }
+        var c = groupedCounts(filtered, module);
+        return '<details class="finalize-group" open><summary><span class="finalize-group-title">' + module.replace(/_/g, " ") + '</span><span class="finalize-group-counts"><span class="badge info">Open ' + c.open + '</span><span class="badge at-risk">Discussing ' + c.discussing + '</span><span class="badge on-track">Decided ' + c.decided + '</span><span class="badge behind">Deferred ' + c.deferred + "</span></span></summary><div class=\"finalize-cards\">" +
+          rows.map(function (item) {
+            var expanded = viewState.expandedItemId === item.id;
+            return '<article class="finalize-card ' + (expanded ? "expanded" : "") + '" data-fin-open="' + item.id + '" tabindex="0">' +
+              '<div class="row wrap" style="justify-content:space-between"><h4>' + UI.escapeHtml(item.title) + '</h4><div class="row wrap"><span class="badge ' + (item.status === "DECIDED" ? "on-track" : (item.status === "DEFERRED" ? "behind" : "at-risk")) + '">' + item.status + '</span><span class="badge info">' + item.priority + "/" + item.impact + '</span></div></div>' +
+              '<p class="meta finalize-preview">' + UI.escapeHtml(item.currentImplementation || item.businessIntent || "No summary available.") + '</p>' +
+              (expanded ? renderItemDetail(item) : "") +
+              '</article>';
+          }).join("") + "</div></details>";
+      }).join("");
+
+      renderLayout(
+        '<section class="finalize-shell">' +
+        '<div class="finalize-header card"><div><h1 class="page-title" style="margin-bottom:8px">BA Checklist</h1><p class="meta">Client clarifications to confirm before locking scope</p></div><div class="row wrap finalize-header-actions"><a class="btn small ghost" href="#/">Home</a><select id="fin-export-format" class="finalize-select"><option value="json">Export JSON</option><option value="text">Export Text</option></select><button class="btn small" id="fin-export-btn">Export</button><button class="btn small" id="fin-copy-btn">Copy</button>' + (isSupervisor ? '<button class="btn small primary" id="fin-add-btn">Add Item</button>' : "") + '</div></div>' +
+        '<div class="finalize-stats row wrap">' +
+        '<span class="badge info">Total ' + stats.total + '</span>' +
+        '<span class="badge at-risk">Open ' + stats.openCount + '</span>' +
+        '<span class="badge at-risk">Discussing ' + stats.discussingCount + '</span>' +
+        '<span class="badge on-track">Decided ' + stats.decidedCount + '</span>' +
+        '<span class="badge behind">Deferred ' + stats.deferredCount + '</span>' +
+        '</div>' +
+        '<div class="finalize-controls card"><div class="row wrap"><input id="fin-search" placeholder="Search title, intent, or current implementation" value="' + UI.escapeHtml(viewState.query) + '"/><select id="fin-module" class="finalize-select"><option value="">All Modules</option>' + modules.map(function (m) { return '<option value="' + m + '" ' + (viewState.module === m ? "selected" : "") + ">" + m + "</option>"; }).join("") + '</select><select id="fin-priority" class="finalize-select"><option value="">All Priority</option><option value="MUST" ' + (viewState.priority === "MUST" ? "selected" : "") + '>MUST</option><option value="SHOULD" ' + (viewState.priority === "SHOULD" ? "selected" : "") + '>SHOULD</option><option value="COULD" ' + (viewState.priority === "COULD" ? "selected" : "") + '>COULD</option></select><button class="btn small ghost" id="fin-reset">Reset filters</button></div><div class="row wrap finalize-status-chips">' + statuses.map(function (s) {
+          var active = viewState.statusFilters.indexOf(s) > -1;
+          return '<button class="btn small ' + (active ? "primary" : "ghost") + '" data-fin-status-filter="' + s + '">' + s + "</button>";
+        }).join("") + '</div></div>' +
+        (hasAnyItems
+          ? (groupedHtml || '<div class="card"><div class="empty">No matching items. <button class="btn small" id="fin-clear-empty">Clear filters</button></div></div>')
+          : '<div class="card"><div class="empty">No finalize items available.' + (isSupervisor ? ' <button class="btn small" id="fin-seed-defaults">Seed Defaults</button>' : "") + '</div></div>') +
+        '</section>'
+      );
+
+      var search = el("fin-search");
+      if (search) {
+        search.addEventListener("input", function () {
+          viewState.query = search.value.trim();
+          renderPage();
+        });
+      }
+      var mod = el("fin-module");
+      if (mod) {
+        mod.addEventListener("change", function () {
+          viewState.module = mod.value;
+          renderPage();
+        });
+      }
+      var pr = el("fin-priority");
+      if (pr) {
+        pr.addEventListener("change", function () {
+          viewState.priority = pr.value;
+          renderPage();
+        });
+      }
+
+      var reset = el("fin-reset");
+      if (reset) {
+        reset.addEventListener("click", function () {
+          viewState.query = "";
+          viewState.module = "";
+          viewState.priority = "";
+          viewState.statusFilters = statuses.slice();
+          viewState.expandedItemId = null;
+          renderPage();
+        });
+      }
+      var clearEmpty = el("fin-clear-empty");
+      if (clearEmpty) {
+        clearEmpty.addEventListener("click", function () {
+          viewState.query = "";
+          viewState.module = "";
+          viewState.priority = "";
+          viewState.statusFilters = statuses.slice();
+          renderPage();
+        });
+      }
+
+      document.querySelectorAll("[data-fin-status-filter]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var key = btn.getAttribute("data-fin-status-filter");
+          var idx = viewState.statusFilters.indexOf(key);
+          if (idx > -1) {
+            if (viewState.statusFilters.length > 1) {
+              viewState.statusFilters.splice(idx, 1);
+            }
+          } else {
+            viewState.statusFilters.push(key);
+          }
+          renderPage();
+        });
+      });
+
+      document.querySelectorAll("[data-fin-open]").forEach(function (card) {
+        var open = function () {
+          var id = card.getAttribute("data-fin-open");
+          viewState.expandedItemId = viewState.expandedItemId === id ? null : id;
+          renderPage();
+        };
+        card.addEventListener("click", function (event) {
+          if (event.target.closest("textarea,select,input,button,a")) {
+            return;
+          }
+          open();
+        });
+        card.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            open();
+          }
+        });
+      });
+
+      if (isSupervisor) {
+        document.querySelectorAll("[data-fin-save]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var id = btn.getAttribute("data-fin-save");
+            var statusSel = document.querySelector('[data-fin-status="' + id + '"]');
+            var priSel = document.querySelector('[data-fin-priority="' + id + '"]');
+            var impactSel = document.querySelector('[data-fin-impact="' + id + '"]');
+            var ownerSel = document.querySelector('[data-fin-owner="' + id + '"]');
+            var decision = document.querySelector('[data-fin-decision="' + id + '"]');
+            var result = Store.updateFinalizeItem(id, {
+              status: statusSel ? statusSel.value : undefined,
+              priority: priSel ? priSel.value : undefined,
+              impact: impactSel ? impactSel.value : undefined,
+              owner: ownerSel ? ownerSel.value : undefined,
+              clientDecision: decision ? decision.value.trim() : ""
+            }, state.user);
+            if (!result.ok) {
+              UI.toast(result.message || "Unable to save item.");
+              return;
+            }
+            UI.toast("Finalize item updated.");
+            renderPage();
+          });
+        });
+
+        document.querySelectorAll("[data-fin-decide]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var id = btn.getAttribute("data-fin-decide");
+            var decision = document.querySelector('[data-fin-decision="' + id + '"]');
+            var result = Store.updateFinalizeItem(id, {
+              status: "DECIDED",
+              clientDecision: decision ? decision.value.trim() : ""
+            }, state.user);
+            if (!result.ok) {
+              UI.toast(result.message || "Unable to mark decided.");
+              return;
+            }
+            UI.toast("Marked as DECIDED.");
+            renderPage();
+          });
+        });
+
+        document.querySelectorAll("[data-fin-delete]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var id = btn.getAttribute("data-fin-delete");
+            var res = Store.deleteFinalizeItem(id, state.user);
+            if (!res.ok) {
+              UI.toast(res.message || "Unable to delete item.");
+              return;
+            }
+            UI.toast("Finalize item deleted.");
+            viewState.expandedItemId = null;
+            renderPage();
+          });
+        });
+
+        var addBtn = el("fin-add-btn");
+        if (addBtn) {
+          addBtn.addEventListener("click", openAddModal);
+        }
+        var seedBtn = el("fin-seed-defaults");
+        if (seedBtn) {
+          seedBtn.addEventListener("click", function () {
+            var result = Store.resetFinalizeItems(state.user);
+            if (!result.ok) {
+              UI.toast(result.message || "Unable to reset defaults.");
+              return;
+            }
+            UI.toast("Finalize defaults restored.");
+            viewState.expandedItemId = null;
+            renderPage();
+          });
+        }
+      }
+
+      var exportBtn = el("fin-export-btn");
+      if (exportBtn) {
+        exportBtn.addEventListener("click", function () {
+          var fmt = el("fin-export-format").value;
+          var content = buildExport(fmt, filtered);
+          var ext = fmt === "text" ? "txt" : "json";
+          var blob = new Blob([content], { type: fmt === "text" ? "text/plain" : "application/json" });
+          var a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "finalize-requirements." + ext;
+          a.click();
+          URL.revokeObjectURL(a.href);
+          UI.toast("Export generated.");
+        });
+      }
+      var copyBtn = el("fin-copy-btn");
+      if (copyBtn) {
+        copyBtn.addEventListener("click", function () {
+          var fmt = el("fin-export-format").value;
+          var content = buildExport(fmt, filtered);
+          copyText(content).then(function () {
+            UI.toast("Copied");
+          }).catch(function () {
+            UI.toast("Clipboard not available");
+          });
+        });
+      }
+    }
+
+    renderPage();
+  }
+
   function renderCurrentRoute() {
     if (!state.route) {
       return;
@@ -1368,6 +1707,16 @@
 
     if (state.route.path === "/student") {
       renderStudentHome();
+      return;
+    }
+
+    if (state.route.path === "/finalize") {
+      Router.go("#/BAchecklist");
+      return;
+    }
+
+    if (state.route.path === "/BAchecklist") {
+      renderFinalizePage();
       return;
     }
 

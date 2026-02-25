@@ -1,11 +1,16 @@
 (function () {
   var DB_KEY = "supervise_prototype_db_v1";
   var SESSION_KEY = "supervise_prototype_session";
+  var FINALIZE_KEY = "ss_finalize_items_v1";
 
   var LIFECYCLE_STATUSES = ["DRAFT", "ACTIVE", "AT_RISK", "BEHIND", "COMPLETED", "ARCHIVED", "CANCELLED"];
   var ACTION_STATUSES = ["Todo", "In Progress", "Done"];
   var PRIORITIES = ["LOW", "MEDIUM", "HIGH"];
   var INTEGRATION_STATUSES = ["NOT_CONFIGURED", "CONFIGURED", "CONNECTED", "ERROR"];
+  var FINALIZE_MODULES = ["AUTH_SESSION", "ROLES_PERMISSIONS", "PROJECT_LIFECYCLE", "MEETINGS", "ACTION_ITEMS", "DASHBOARD_KPIS", "FILES", "INTEGRATIONS", "REPORTING_EXPORT"];
+  var FINALIZE_STATUSES = ["OPEN", "DISCUSSING", "DECIDED", "DEFERRED"];
+  var FINALIZE_PRIORITIES = ["MUST", "SHOULD", "COULD"];
+  var FINALIZE_IMPACTS = ["HIGH", "MEDIUM", "LOW"];
 
   function clone(data) {
     return JSON.parse(JSON.stringify(data));
@@ -294,6 +299,265 @@
     });
   }
 
+  function loadFinalizeItems() {
+    var raw = localStorage.getItem(FINALIZE_KEY);
+    if (!raw) {
+      return null;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveFinalizeItems(items) {
+    localStorage.setItem(FINALIZE_KEY, JSON.stringify(items));
+    return items;
+  }
+
+  function normalizeFinalizeItem(item) {
+    var now = nowIso();
+    item = item || {};
+    var createdAt = item.createdAt || now;
+    var status = FINALIZE_STATUSES.indexOf(item.status) > -1 ? item.status : "OPEN";
+    var decidedAt = item.decidedAt || null;
+    if (status === "DECIDED" && !decidedAt) {
+      decidedAt = now;
+    }
+    if (status !== "DECIDED") {
+      decidedAt = null;
+    }
+    return {
+      id: item.id || ("fin_" + Date.now() + "_" + Math.floor(Math.random() * 10000)),
+      module: FINALIZE_MODULES.indexOf(item.module) > -1 ? item.module : "REPORTING_EXPORT",
+      title: String(item.title || "").trim(),
+      businessIntent: String(item.businessIntent || "").trim(),
+      currentImplementation: String(item.currentImplementation || "").trim(),
+      riskPrevented: String(item.riskPrevented || "").trim(),
+      alternatives: safeArray(item.alternatives).map(function (a) { return String(a || "").trim(); }).filter(Boolean),
+      clientDecision: String(item.clientDecision || "").trim(),
+      status: status,
+      priority: FINALIZE_PRIORITIES.indexOf(item.priority) > -1 ? item.priority : "SHOULD",
+      impact: FINALIZE_IMPACTS.indexOf(item.impact) > -1 ? item.impact : "MEDIUM",
+      owner: item.owner === "TEAM" ? "TEAM" : "CLIENT",
+      createdAt: createdAt,
+      updatedAt: item.updatedAt || createdAt,
+      decidedAt: decidedAt,
+      updatedByUserId: item.updatedByUserId || null
+    };
+  }
+
+  function ensureFinalizeItemsSeeded() {
+    var existing = loadFinalizeItems();
+    if (existing && Array.isArray(existing)) {
+      var normalizedExisting = existing.map(normalizeFinalizeItem);
+      saveFinalizeItems(normalizedExisting);
+      return normalizedExisting;
+    }
+    var seed = window.Seed && window.Seed.generateFinalizeSeedItems ? window.Seed.generateFinalizeSeedItems() : [];
+    var normalizedSeed = safeArray(seed).map(normalizeFinalizeItem);
+    saveFinalizeItems(normalizedSeed);
+    return normalizedSeed;
+  }
+
+  function getFinalizeItems() {
+    return clone(ensureFinalizeItemsSeeded()).sort(function (a, b) {
+      var moduleCmp = FINALIZE_MODULES.indexOf(a.module) - FINALIZE_MODULES.indexOf(b.module);
+      if (moduleCmp !== 0) {
+        return moduleCmp;
+      }
+      var statusCmp = FINALIZE_STATUSES.indexOf(a.status) - FINALIZE_STATUSES.indexOf(b.status);
+      if (statusCmp !== 0) {
+        return statusCmp;
+      }
+      var priorityCmp = FINALIZE_PRIORITIES.indexOf(a.priority) - FINALIZE_PRIORITIES.indexOf(b.priority);
+      if (priorityCmp !== 0) {
+        return priorityCmp;
+      }
+      return a.title.localeCompare(b.title);
+    });
+  }
+
+  function resolveUser(userOrId) {
+    if (!userOrId) {
+      return null;
+    }
+    if (typeof userOrId === "string") {
+      return getUserById(userOrId);
+    }
+    if (userOrId.id) {
+      return getUserById(userOrId.id) || userOrId;
+    }
+    return null;
+  }
+
+  function canManageFinalize(userOrId) {
+    var user = resolveUser(userOrId);
+    return !!(user && user.role === "SUPERVISOR");
+  }
+
+  function addFinalizeItem(payload, userOrId) {
+    if (!canManageFinalize(userOrId)) {
+      return { ok: false, message: "Only supervisors can add finalize items." };
+    }
+    var user = resolveUser(userOrId);
+    if (!payload || !payload.module || !payload.title) {
+      return { ok: false, message: "Module and title are required." };
+    }
+    var items = ensureFinalizeItemsSeeded();
+    var now = nowIso();
+    var newItem = normalizeFinalizeItem({
+      id: "fin_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
+      module: payload.module,
+      title: payload.title,
+      businessIntent: payload.businessIntent || "",
+      currentImplementation: payload.currentImplementation || "",
+      riskPrevented: payload.riskPrevented || "",
+      alternatives: payload.alternatives || [],
+      clientDecision: payload.clientDecision || "",
+      status: payload.status || "OPEN",
+      priority: payload.priority || "SHOULD",
+      impact: payload.impact || "MEDIUM",
+      owner: payload.owner || "CLIENT",
+      createdAt: now,
+      updatedAt: now,
+      decidedAt: null,
+      updatedByUserId: user ? user.id : null
+    });
+    items.push(newItem);
+    saveFinalizeItems(items);
+    return { ok: true, item: clone(newItem) };
+  }
+
+  function updateFinalizeItem(id, patch, userOrId) {
+    if (!canManageFinalize(userOrId)) {
+      return { ok: false, message: "Only supervisors can edit finalize items." };
+    }
+    var user = resolveUser(userOrId);
+    var items = ensureFinalizeItemsSeeded();
+    var idx = items.findIndex(function (item) { return item.id === id; });
+    if (idx === -1) {
+      return { ok: false, message: "Finalize item not found." };
+    }
+    var current = items[idx];
+    var next = {
+      id: current.id,
+      module: patch.module !== undefined ? patch.module : current.module,
+      title: patch.title !== undefined ? patch.title : current.title,
+      businessIntent: patch.businessIntent !== undefined ? patch.businessIntent : current.businessIntent,
+      currentImplementation: patch.currentImplementation !== undefined ? patch.currentImplementation : current.currentImplementation,
+      riskPrevented: patch.riskPrevented !== undefined ? patch.riskPrevented : current.riskPrevented,
+      alternatives: patch.alternatives !== undefined ? patch.alternatives : current.alternatives,
+      clientDecision: patch.clientDecision !== undefined ? patch.clientDecision : current.clientDecision,
+      status: patch.status !== undefined ? patch.status : current.status,
+      priority: patch.priority !== undefined ? patch.priority : current.priority,
+      impact: patch.impact !== undefined ? patch.impact : current.impact,
+      owner: patch.owner !== undefined ? patch.owner : current.owner,
+      createdAt: current.createdAt,
+      updatedAt: nowIso(),
+      decidedAt: current.decidedAt,
+      updatedByUserId: user ? user.id : null
+    };
+    if (next.status === "DECIDED") {
+      next.decidedAt = current.decidedAt || nowIso();
+    } else {
+      next.decidedAt = null;
+    }
+    items[idx] = normalizeFinalizeItem(next);
+    saveFinalizeItems(items);
+    return { ok: true, item: clone(items[idx]) };
+  }
+
+  function deleteFinalizeItem(id, userOrId) {
+    if (!canManageFinalize(userOrId)) {
+      return { ok: false, message: "Only supervisors can delete finalize items." };
+    }
+    var items = ensureFinalizeItemsSeeded();
+    var next = items.filter(function (item) { return item.id !== id; });
+    if (next.length === items.length) {
+      return { ok: false, message: "Finalize item not found." };
+    }
+    saveFinalizeItems(next);
+    return { ok: true };
+  }
+
+  function sortedFinalize(items) {
+    return safeArray(items).slice().sort(function (a, b) {
+      var moduleCmp = FINALIZE_MODULES.indexOf(a.module) - FINALIZE_MODULES.indexOf(b.module);
+      if (moduleCmp !== 0) {
+        return moduleCmp;
+      }
+      var statusCmp = FINALIZE_STATUSES.indexOf(a.status) - FINALIZE_STATUSES.indexOf(b.status);
+      if (statusCmp !== 0) {
+        return statusCmp;
+      }
+      var priorityCmp = FINALIZE_PRIORITIES.indexOf(a.priority) - FINALIZE_PRIORITIES.indexOf(b.priority);
+      if (priorityCmp !== 0) {
+        return priorityCmp;
+      }
+      return a.title.localeCompare(b.title);
+    });
+  }
+
+  function exportFinalizeItems(format, itemsOverride) {
+    var items = sortedFinalize(itemsOverride && Array.isArray(itemsOverride) ? itemsOverride : getFinalizeItems());
+    if ((format || "json") === "text") {
+      var lines = [];
+      var grouped = {};
+      items.forEach(function (item) {
+        grouped[item.module] = grouped[item.module] || [];
+        grouped[item.module].push(item);
+      });
+      FINALIZE_MODULES.forEach(function (module) {
+        if (!grouped[module] || !grouped[module].length) {
+          return;
+        }
+        lines.push("## " + module);
+        grouped[module].forEach(function (item) {
+          lines.push("- [" + item.status + "] [" + item.priority + "/" + item.impact + "] " + item.title);
+          lines.push("  Current implementation: " + (item.currentImplementation || "-"));
+          lines.push("  Decision: " + (item.clientDecision || ""));
+        });
+        lines.push("");
+      });
+      return lines.join("\n").trim();
+    }
+    return JSON.stringify(items, null, 2);
+  }
+
+  function getFinalizeStats() {
+    var items = getFinalizeItems();
+    var stats = {
+      openCount: 0,
+      discussingCount: 0,
+      decidedCount: 0,
+      deferredCount: 0,
+      total: items.length
+    };
+    items.forEach(function (item) {
+      if (item.status === "OPEN") {
+        stats.openCount += 1;
+      } else if (item.status === "DISCUSSING") {
+        stats.discussingCount += 1;
+      } else if (item.status === "DECIDED") {
+        stats.decidedCount += 1;
+      } else if (item.status === "DEFERRED") {
+        stats.deferredCount += 1;
+      }
+    });
+    return stats;
+  }
+
+  function resetFinalizeItems(userOrId) {
+    if (!canManageFinalize(userOrId)) {
+      return { ok: false, message: "Only supervisors can reset finalize items." };
+    }
+    localStorage.removeItem(FINALIZE_KEY);
+    ensureFinalizeItemsSeeded();
+    return { ok: true, items: getFinalizeItems() };
+  }
+
   function loadDB() {
     var raw = localStorage.getItem(DB_KEY);
     if (!raw) {
@@ -318,6 +582,7 @@
     }
     normalizeDb(db);
     saveDB(db);
+    ensureFinalizeItemsSeeded();
     return db;
   }
 
@@ -1205,6 +1470,14 @@
     listMyActionItems: listMyActionItems,
     listProjectAuditEvents: listProjectAuditEvents,
     isOverdueAction: isOverdueAction,
-    lifecycleToLegacyStatus: lifecycleToLegacyStatus
+    lifecycleToLegacyStatus: lifecycleToLegacyStatus,
+    getFinalizeItems: getFinalizeItems,
+    addFinalizeItem: addFinalizeItem,
+    updateFinalizeItem: updateFinalizeItem,
+    deleteFinalizeItem: deleteFinalizeItem,
+    exportFinalizeItems: exportFinalizeItems,
+    getFinalizeStats: getFinalizeStats,
+    resetFinalizeItems: resetFinalizeItems,
+    canManageFinalize: canManageFinalize
   };
 })();

@@ -69,6 +69,75 @@
     };
   }
 
+  function finalizeItem(module, title, businessIntent, currentImplementation, riskPrevented, alternatives, priority, impact) {
+    var createdAt = new Date().toISOString();
+    return {
+      id: makeId("fin"),
+      module: module,
+      title: title,
+      businessIntent: businessIntent,
+      currentImplementation: currentImplementation,
+      riskPrevented: riskPrevented,
+      alternatives: alternatives || [],
+      clientDecision: "",
+      status: "OPEN",
+      priority: priority,
+      impact: impact,
+      owner: "CLIENT",
+      createdAt: createdAt,
+      updatedAt: createdAt,
+      decidedAt: null
+    };
+  }
+
+  function generateFinalizeSeedItems() {
+    return [
+      finalizeItem("AUTH_SESSION", "Supervisor creation model is controlled", "Ensure supervisory authority remains institution-governed.", "Supervisor is seeded; no supervisor self-registration in prototype.", "Prevents role escalation and fake supervisor accounts.", ["Invite-based supervisor onboarding", "Admin approval queue"], "MUST", "HIGH"),
+      finalizeItem("AUTH_SESSION", "Student registration scope and verification", "Confirm the minimum registration flow needed for academic onboarding.", "Students self-register with required fields; no email verification enforcement yet.", "Avoids fake/duplicate student identities in production.", ["Email OTP verification", "Institution SSO only"], "SHOULD", "MEDIUM"),
+      finalizeItem("AUTH_SESSION", "Session timeout policy (6 hours)", "Balance security and usability for lab/shared environments.", "Session expires after 6 hours of inactivity.", "Reduces risk of unauthorized access on unattended devices.", ["Role-specific timeout windows", "Keep fixed 6-hour policy"], "MUST", "HIGH"),
+      finalizeItem("AUTH_SESSION", "Account state management", "Clarify if account lifecycle controls are required for governance.", "No suspend/disable states implemented in prototype.", "Prevents continued access by withdrawn users.", ["Supervisor-managed blocklist", "Admin-only deactivation"], "COULD", "MEDIUM"),
+
+      finalizeItem("ROLES_PERMISSIONS", "Project lifecycle control remains supervisor-only", "Treat lifecycle states as official academic supervision signals.", "Only supervisor can transition lifecycle status.", "Prevents students self-marking projects completed or archived.", ["Student status-change request workflow", "Co-supervisor shared authority"], "MUST", "HIGH"),
+      finalizeItem("ROLES_PERMISSIONS", "Action item editing boundaries", "Keep ownership and accountability clear per assignee.", "Students can edit only assigned items; supervisor can edit all.", "Prevents unilateral deadline/priority manipulation.", ["Student due-date change request with approval"], "MUST", "HIGH"),
+      finalizeItem("ROLES_PERMISSIONS", "Meeting approval authority model", "Minutes become official only after supervisor verification.", "Students submit meeting drafts; supervisor approves.", "Avoids unauthorized finalization of supervision records.", ["No approval stage", "Dual approval"], "MUST", "HIGH"),
+      finalizeItem("ROLES_PERMISSIONS", "Future co-supervisor support", "Prepare governance model for multiple supervisors per project.", "Single-supervisor assumption in prototype.", "Avoids authorization ambiguity when scaling.", ["Project-level supervisor roster"], "COULD", "MEDIUM"),
+
+      finalizeItem("PROJECT_LIFECYCLE", "Confirm final lifecycle taxonomy", "Lock shared vocabulary for monitoring and reporting.", "States implemented: DRAFT, ACTIVE, AT_RISK, BEHIND, COMPLETED, ARCHIVED, CANCELLED.", "Avoids inconsistent status interpretation across teams.", ["Remove CANCELLED", "Merge AT_RISK and BEHIND"], "MUST", "HIGH"),
+      finalizeItem("PROJECT_LIFECYCLE", "Transition blocking rules", "Align transition controls with operational readiness.", "DRAFT to ACTIVE blocked until comms integration is CONNECTED.", "Prevents projects running without communication channel.", ["Allow override with warning"], "MUST", "HIGH"),
+      finalizeItem("PROJECT_LIFECYCLE", "Cancellation policy details", "Define process quality for early termination decisions.", "CANCELLED available; no mandatory reason capture.", "Avoids untraceable project termination decisions.", ["Require cancellation reason and approver"], "SHOULD", "MEDIUM"),
+      finalizeItem("PROJECT_LIFECYCLE", "Archive vs delete strategy", "Retain institutional memory while controlling clutter.", "Archive state exists; hard delete flow not exposed.", "Prevents accidental permanent data loss.", ["Soft-delete with retention window"], "MUST", "HIGH"),
+
+      finalizeItem("MEETINGS", "Approval workflow is mandatory", "Ensure meeting outcomes are official before downstream actions.", "Meeting workflow: DRAFT -> SUBMITTED -> APPROVED.", "Prevents conflicting supervision records.", ["Skip approval for low-risk meetings"], "MUST", "HIGH"),
+      finalizeItem("MEETINGS", "Post-approval edit policy", "Define immutability guarantees for approved minutes.", "Approved meeting action item core fields are locked.", "Prevents historical record tampering.", ["Revision workflow with audit trail"], "MUST", "HIGH"),
+      finalizeItem("MEETINGS", "Attendance capture requirement", "Clarify whether attendance is mandatory for governance.", "Prototype stores title/date/summary/decisions without attendance.", "Avoids compliance gaps if attendance is required.", ["Optional attendance section"], "COULD", "LOW"),
+      finalizeItem("MEETINGS", "Scheduling scope decision", "Set expectations between planning calendar and minutes ledger.", "Prototype focuses on logging minutes, not scheduling.", "Prevents scope creep during MVP hardening.", ["Integrate scheduler later"], "SHOULD", "MEDIUM"),
+
+      finalizeItem("ACTION_ITEMS", "Required action item fields", "Guarantee assignment clarity and execution planning.", "Assignee, due date, and priority are enforced.", "Prevents unowned or undated tasks.", ["Allow draft action items"], "MUST", "HIGH"),
+      finalizeItem("ACTION_ITEMS", "Done validation evidence rule", "Ensure closure claims are auditable.", "Done requires comment OR evidence link.", "Prevents silent task closure and KPI inflation.", ["Require both comment and evidence"], "MUST", "HIGH"),
+      finalizeItem("ACTION_ITEMS", "Overdue definition confirmation", "Make risk thresholds deterministic and explainable.", "Overdue = dueDate < today and status != Done.", "Prevents subjective late-task interpretation.", ["Grace period", "Weekend-aware rule"], "MUST", "HIGH"),
+      finalizeItem("ACTION_ITEMS", "Reassignment policy and history", "Support change-control around ownership shifts.", "Reassignment is possible; no dedicated reassignment history screen.", "Prevents accountability confusion.", ["Mandatory reassignment reason"], "SHOULD", "MEDIUM"),
+      finalizeItem("ACTION_ITEMS", "Status vocabulary extension", "Determine if blockers need explicit tracking.", "Statuses: Todo, In Progress, Done.", "Avoids hidden blocked work under generic statuses.", ["Add BLOCKED status"], "COULD", "MEDIUM"),
+
+      finalizeItem("DASHBOARD_KPIS", "Health mapping confirmation", "Ensure KPI categories map to agreed lifecycle semantics.", "ACTIVE=On Track, AT_RISK=At Risk, BEHIND=Behind.", "Prevents reporting disputes with stakeholders.", ["Add composite health score"], "MUST", "HIGH"),
+      finalizeItem("DASHBOARD_KPIS", "AT_RISK threshold tuning", "Lock threshold for proactive intervention alerts.", "Suggested AT_RISK currently uses overdue-count heuristic.", "Prevents arbitrary escalation patterns.", ["Custom threshold by batch"], "SHOULD", "MEDIUM"),
+      finalizeItem("DASHBOARD_KPIS", "Active student definition", "Align engagement metric with meaningful participation.", "Active students based on recent action updates.", "Avoids inflated engagement from passive logins.", ["Login-based metric", "Weighted activity metric"], "SHOULD", "MEDIUM"),
+      finalizeItem("DASHBOARD_KPIS", "Pagination preferences", "Maintain readability for large project portfolios.", "Dashboard table paginates with 8 rows per page.", "Prevents scanning fatigue.", ["Configurable page size"], "COULD", "LOW"),
+
+      finalizeItem("FILES", "Metadata-only vs real storage", "Clarify MVP boundary for document handling.", "Prototype stores file metadata only; no binary persistence.", "Prevents false assumptions about document retention.", ["External object storage integration"], "MUST", "HIGH"),
+      finalizeItem("FILES", "Delete authority policy", "Define who can remove submitted artifacts.", "Delete flow not exposed in prototype.", "Prevents unauthorized data removal.", ["Supervisor-only deletion"], "SHOULD", "MEDIUM"),
+      finalizeItem("FILES", "Archived project retention", "Define retention obligations for historical records.", "No explicit retention policy tied to ARCHIVED projects.", "Prevents compliance uncertainty.", ["Time-based retention"], "SHOULD", "MEDIUM"),
+
+      finalizeItem("INTEGRATIONS", "Comms gating rule confirmation", "Ensure minimal operational readiness before activation.", "Comms integration must be CONNECTED for DRAFT to ACTIVE.", "Prevents unmanaged active projects.", ["Warn-only instead of block"], "MUST", "HIGH"),
+      finalizeItem("INTEGRATIONS", "GitHub/Jira optionality", "Confirm which tools are optional vs mandatory.", "GitHub/Jira are optional and status-tracked.", "Prevents unnecessary go-live blockers.", ["Require Jira for all projects"], "SHOULD", "MEDIUM"),
+      finalizeItem("INTEGRATIONS", "Validation depth for MVP", "Agree acceptable level of validation rigor at prototype stage.", "Validation is currently regex/format based only.", "Prevents overengineering in MVP or false trust in formats.", ["Ping-based connectivity checks"], "COULD", "LOW"),
+      finalizeItem("INTEGRATIONS", "Configuration scope decision", "Clarify whether integrations are project-level or supervisor-level defaults.", "Current model stores integration setup per project.", "Prevents migration complexity later.", ["Supervisor-level template + project override"], "SHOULD", "MEDIUM"),
+
+      finalizeItem("REPORTING_EXPORT", "Export scope and report content", "Define minimum dataset for stakeholder reporting.", "No dedicated reporting export yet; audit + tracking data exists.", "Prevents ad-hoc report generation mismatches.", ["Project summary-only export", "Full audit export"], "MUST", "HIGH"),
+      finalizeItem("REPORTING_EXPORT", "Export format requirements", "Identify required deliverable formats for client operations.", "Prototype can export checklist data as JSON/text (new module).", "Prevents late-stage reporting rework.", ["Add printable/PDF format"], "SHOULD", "MEDIUM"),
+      finalizeItem("REPORTING_EXPORT", "Export authority constraints", "Ensure report distribution aligns with governance.", "Intended supervisor-led exports in current supervision model.", "Prevents unapproved sharing of sensitive supervision records.", ["Student read-only export subset"], "SHOULD", "MEDIUM")
+    ];
+  }
+
   function generateSeedData() {
     var users = [
       { id: "u_sup", name: "Dr. Maya Perera", fullName: "Dr. Maya Perera", email: "supervisor@demo.com", password: "demo123", role: "SUPERVISOR", createdAt: dateOffset(-200) }
@@ -609,6 +678,7 @@
   }
 
   window.Seed = {
-    generateSeedData: generateSeedData
+    generateSeedData: generateSeedData,
+    generateFinalizeSeedItems: generateFinalizeSeedItems
   };
 })();
