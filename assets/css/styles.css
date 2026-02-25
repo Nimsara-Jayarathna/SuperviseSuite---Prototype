@@ -1,23 +1,23 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap");
 
 :root {
-  --bg: #f8f9fa;
+  --bg: #f5f7fa;
   --panel: #ffffff;
-  --text: #2d3748;
-  --muted: #64748b;
-  --border: #dce3ea;
-  --primary: #3b82f6;
-  --primary-strong: #2563eb;
-  --primary-soft: #dbeafe;
-  --ok: #10b981;
-  --ok-bg: #d1fae5;
-  --warn: #f59e0b;
-  --warn-bg: #fef3c7;
-  --bad: #991b1b;
-  --bad-bg: #fee2e2;
-  --shadow: 0 12px 30px rgba(17, 24, 39, 0.08);
-  --shadow-soft: 0 6px 18px rgba(17, 24, 39, 0.05);
-  --radius: 14px;
+  --text: #212529;
+  --muted: #5f6b7a;
+  --border: #d7dde3;
+  --primary: #0f6cbf;
+  --primary-strong: #0d5ea6;
+  --primary-soft: #e8f2fb;
+  --ok: #2e7d32;
+  --ok-bg: #e8f5e9;
+  --warn: #9c6f00;
+  --warn-bg: #fff4d6;
+  --bad: #b71c1c;
+  --bad-bg: #fde8e7;
+  --shadow: 0 1px 2px rgba(17, 24, 39, 0.08);
+  --shadow-soft: 0 1px 1px rgba(17, 24, 39, 0.06);
+  --radius: 6px;
 }
 
 * {
@@ -30,13 +30,11 @@
 
 body {
   margin: 0;
-  font-family: "Plus Jakarta Sans", "Segoe UI", Arial, sans-serif;
+  font-family: "Open Sans", "Segoe UI", Arial, sans-serif;
   color: var(--text);
-  background:
-    radial-gradient(circle at 8% -8%, rgba(59, 130, 246, 0.18) 0, rgba(59, 130, 246, 0) 42%),
-    radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.08) 0, rgba(16, 185, 129, 0) 34%),
-    var(--bg);
+  background: var(--bg);
   line-height: 1.45;
+  font-size: 14px;
 }
 
 .app-shell {
@@ -46,20 +44,21 @@ body {
 
 .sidebar {
   width: 250px;
-  background: linear-gradient(185deg, var(--primary) 0%, var(--primary-strong) 100%);
-  color: #eff6ff;
+  background: #1f4b8f;
+  color: #f6f8fb;
   padding: 20px 14px 24px;
   position: sticky;
   top: 0;
   height: 100vh;
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.12);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.14);
 }
 
 .brand {
-  font-weight: 800;
-  font-size: 19px;
-  letter-spacing: 0.01em;
+  font-weight: 700;
+  font-size: 20px;
   margin: 4px 8px 22px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .nav-group {
@@ -69,23 +68,23 @@ body {
 }
 
 .nav-item {
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
-  color: #dbeafe;
+  color: #deecff;
   text-align: left;
   padding: 11px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
-  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .nav-item:hover,
 .nav-item.active {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
   color: #fff;
-  transform: translateX(2px);
 }
 
 .main-wrap {
@@ -94,10 +93,9 @@ body {
 }
 
 .topbar {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(9px);
+  background: #ffffff;
   border-bottom: 1px solid var(--border);
-  padding: 14px 22px;
+  padding: 12px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -130,9 +128,9 @@ select,
 textarea {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-size: 14px;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 13px;
   background: #fff;
   color: var(--text);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -153,13 +151,13 @@ textarea:focus {
 }
 
 .content {
-  padding: 24px;
+  padding: 20px;
 }
 
 .page-title {
-  margin: 0 0 18px;
-  font-size: 24px;
-  letter-spacing: -0.01em;
+  margin: 0 0 14px;
+  font-size: 30px;
+  font-weight: 600;
 }
 
 .content > * {
@@ -204,12 +202,12 @@ textarea:focus {
   box-shadow: var(--shadow);
   border-radius: var(--radius);
   padding: 16px;
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 30px rgba(17, 24, 39, 0.1);
+  box-shadow: 0 2px 4px rgba(17, 24, 39, 0.1);
+  border-color: #c9d4de;
 }
 
 .metric-value {
@@ -239,8 +237,10 @@ textarea:focus {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #475569;
+  color: #4f5b6b;
   font-weight: 700;
+  background: #f3f6f9;
+  border-top: 1px solid var(--border);
 }
 
 .table th,
@@ -252,7 +252,7 @@ textarea:focus {
 }
 
 .table tbody tr:hover {
-  background: rgba(219, 234, 254, 0.26);
+  background: #f8fbff;
 }
 
 .action-items-table th,
@@ -337,9 +337,9 @@ textarea:focus {
 .btn {
   border: 1px solid var(--border);
   background: #fff;
-  border-radius: 12px;
-  padding: 9px 14px;
-  font-size: 14px;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
   display: inline-flex;
@@ -352,7 +352,7 @@ textarea:focus {
 }
 
 .btn:hover {
-  transform: translateY(-1px);
+  transform: none;
   box-shadow: var(--shadow-soft);
 }
 
@@ -380,7 +380,7 @@ textarea:focus {
 
 .btn.small {
   font-size: 12px;
-  padding: 6px 8px;
+  padding: 6px 7px;
 }
 
 .projects-grid {
@@ -415,20 +415,20 @@ textarea:focus {
 
 .tab {
   border: 1px solid var(--border);
-  background: #fff;
-  border-radius: 999px;
-  padding: 8px 13px;
+  background: #f8fafc;
+  border-radius: 4px;
+  padding: 7px 12px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: #475569;
+  color: #4d5b6d;
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .tab.active {
-  background: var(--primary-soft);
-  color: var(--primary-strong);
-  border-color: #bfdbfe;
+  background: #fff;
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 .split {
@@ -439,9 +439,9 @@ textarea:focus {
 
 .empty {
   text-align: center;
-  border: 1px dashed #c7d2e0;
-  background: #f8fbff;
-  border-radius: 12px;
+  border: 1px dashed #cfd8e3;
+  background: #fafcfe;
+  border-radius: 6px;
   padding: 24px;
   color: var(--muted);
 }
@@ -472,7 +472,7 @@ textarea:focus {
 .toast {
   background: #1f2937;
   color: #fff;
-  border-radius: 12px;
+  border-radius: 6px;
   padding: 10px 12px;
   font-size: 13px;
   box-shadow: var(--shadow);
@@ -493,7 +493,7 @@ textarea:focus {
 .modal {
   width: min(740px, 100%);
   background: #fff;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   padding: 18px;
   max-height: 90vh;
