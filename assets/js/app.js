@@ -82,6 +82,22 @@
     return diff + " day(s) left";
   }
 
+  function milestoneUrgency(dateValue) {
+    if (!dateValue) {
+      return { label: "No date", tone: "neutral" };
+    }
+    var target = new Date(dateValue);
+    var today = new Date(new Date().toISOString().slice(0, 10));
+    var diff = Math.floor((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (diff < 0) {
+      return { label: "Overdue", tone: "critical" };
+    }
+    if (diff <= 7) {
+      return { label: "Due soon", tone: "warning" };
+    }
+    return { label: "Planned", tone: "normal" };
+  }
+
   function eventTypeLabel(type) {
     var map = {
       PROJECT_CREATED: "Project created",
@@ -541,16 +557,19 @@
       var rows = payload.projects.filter(function (p) { return projectMatchesSearch(p, users); }).map(function (p) {
         var summary = Store.getProjectSummary(p.id) || { openActionItems: 0, overdueCount: 0, meetingCount: 0 };
         var hasIntegrationIssues = p.githubIntegration.status !== "CONNECTED" || p.jiraIntegration.status !== "CONNECTED" || p.commsIntegration.status !== "CONNECTED";
+        var milestone = milestoneUrgency(p.milestoneDate);
+        var rowTone = summary.overdueCount > 0 || p.lifecycleStatus === "BEHIND"
+          ? "critical"
+          : (p.lifecycleStatus === "AT_RISK" ? "warning" : "normal");
         return '<tr>' +
-          '<td>' + UI.escapeHtml(p.title) + '</td>' +
+          '<td><div class="scan-project"><strong>' + UI.escapeHtml(p.title) + '</strong>' + (hasIntegrationIssues ? ' <span class="scan-flag">Integration issue</span>' : "") + '</div></td>' +
           '<td>' + lifecycleBadge(p.lifecycleStatus) + (p.healthSuggestedStatus ? ' <span class="badge at-risk">Suggested ' + UI.escapeHtml(p.healthSuggestedStatus) + "</span>" : "") + '</td>' +
-          '<td>' + UI.formatDateTime(p.analytics.lastActivityAt) + '</td>' +
-          '<td>' + summary.openActionItems + '</td>' +
-          '<td>' + summary.overdueCount + '</td>' +
-          '<td>' + UI.formatDate(p.milestoneDate) + '<div class="meta">' + milestoneDeltaText(p.milestoneDate) + '</div></td>' +
-          '<td><div class="quick-actions"><button class="btn small" data-open-project="' + p.id + '">Open</button> <button class="btn small" data-open-tab="meetings" data-open-project="' + p.id + '">Meetings</button> <button class="btn small" data-open-tab="files" data-open-project="' + p.id + '">Files</button></div></td>' +
-          "</tr>" +
-          (hasIntegrationIssues ? '<tr><td colspan="7"><div class="notice integration-note">One or more integrations are not fully connected.</div></td></tr>' : "");
+          '<td><div>' + UI.formatDateTime(p.analytics.lastActivityAt) + '</div></td>' +
+          '<td><span class="scan-count scan-count-neutral">' + summary.openActionItems + '</span></td>' +
+          '<td><span class="scan-count ' + (summary.overdueCount > 0 ? "scan-count-critical" : "scan-count-ok") + '">' + summary.overdueCount + '</span></td>' +
+          '<td><div>' + UI.formatDate(p.milestoneDate) + '</div><div class="meta"><span class="scan-urgency scan-urgency-' + milestone.tone + '">' + milestone.label + '</span> ' + milestoneDeltaText(p.milestoneDate) + '</div></td>' +
+          '<td><div class="quick-actions quick-actions-' + rowTone + '"><button class="btn small" data-open-project="' + p.id + '">Open</button> <button class="btn small" data-open-tab="meetings" data-open-project="' + p.id + '">Meetings</button> <button class="btn small" data-open-tab="files" data-open-project="' + p.id + '">Files</button></div></td>' +
+          "</tr>";
       }).join("");
 
       renderLayout(
