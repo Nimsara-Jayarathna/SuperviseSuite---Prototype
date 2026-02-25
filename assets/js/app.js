@@ -200,7 +200,7 @@
       return "";
     }
 
-    return '<div class="topbar-left"><button class="btn ghost small menu-btn" id="menu-toggle" aria-label="Toggle menu">Menu</button><div class="search-wrap"><input class="search-input" id="global-search" placeholder="Search projects or students" value="' + UI.escapeHtml(state.search) + '"/></div></div>' +
+    return '<div class="topbar-left"><div class="search-wrap search-wrap-enhanced"><span class="search-icon" aria-hidden="true">&#128269;</span><input class="search-input" id="global-search" placeholder="Search projects, students, milestones..." value="' + UI.escapeHtml(state.search) + '"/></div></div>' +
       '<div class="topbar-right"><span class="topbar-role">' + UI.escapeHtml(state.user.role) + '</span><strong class="topbar-user">' + UI.escapeHtml(state.user.name) + '</strong><button class="btn small topbar-logout" id="logout-btn">Logout</button></div>';
   }
 
@@ -286,13 +286,6 @@
       gs.addEventListener("input", function () {
         state.search = gs.value.trim();
         renderCurrentRoute();
-      });
-    }
-
-    var menu = el("menu-toggle");
-    if (menu) {
-      menu.addEventListener("click", function () {
-        toggleSidebar(!state.ui.sidebarOpen);
       });
     }
 
@@ -551,10 +544,13 @@
     dashboardSkeleton();
     var projects = Store.getProjectsForUser(state.user);
     var users = Store.listStudents();
+    var pageSize = 8;
+    var currentPage = 1;
 
     Store.simulate({ projects: projects, stats: Store.statsForDashboard(projects) }).then(function (payload) {
       var visibleProjects = payload.projects.filter(function (p) { return projectMatchesSearch(p, users); });
-      var rows = payload.projects.filter(function (p) { return projectMatchesSearch(p, users); }).map(function (p) {
+
+      function rowForProject(p) {
         var summary = Store.getProjectSummary(p.id) || { openActionItems: 0, overdueCount: 0, meetingCount: 0 };
         var hasIntegrationIssues = p.githubIntegration.status !== "CONNECTED" || p.jiraIntegration.status !== "CONNECTED" || p.commsIntegration.status !== "CONNECTED";
         var milestone = milestoneUrgency(p.milestoneDate);
@@ -570,36 +566,80 @@
           '<td><div>' + UI.formatDate(p.milestoneDate) + '</div><div class="meta"><span class="scan-urgency scan-urgency-' + milestone.tone + '">' + milestone.label + '</span> ' + milestoneDeltaText(p.milestoneDate) + '</div></td>' +
           '<td><div class="quick-actions quick-actions-' + rowTone + '"><button class="btn small action-btn-open" data-open-project="' + p.id + '">Open</button> <button class="btn small action-btn-meetings" data-open-tab="meetings" data-open-project="' + p.id + '">Meetings</button> <button class="btn small action-btn-files" data-open-tab="files" data-open-project="' + p.id + '">Files</button></div></td>' +
           "</tr>";
-      }).join("");
+      }
 
-      renderLayout(
-        '<div class="dashboard-head card"><div class="dashboard-head-inner"><div><h1 class="page-title dashboard-title">Supervisor Dashboard</h1><div class="meta">Portfolio overview, delivery health, and intervention-ready actions.</div></div><div class="dashboard-head-kpis"><span class="badge on-track">Visible projects: ' + visibleProjects.length + '</span><span class="badge at-risk">Overdue: ' + payload.stats.overdue + '</span><span class="badge info">Active students this week: ' + payload.stats.activeStudents + '</span></div></div></div>' +
-        '<div class="grid cards-5 dashboard-kpis" style="margin-bottom:14px">' +
-          metricCard("Total Projects", payload.stats.total) +
-          metricCard("On Track", payload.stats.onTrack) +
-          metricCard("At Risk", payload.stats.atRisk) +
-          metricCard("Behind", payload.stats.behind) +
-          metricCard("Overdue Action Items", payload.stats.overdue) +
-        "</div>" +
-        '<div class="card project-health-card" style="margin-bottom:14px"><div class="row wrap" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Project Health Table</h3><div class="meta">Showing ' + visibleProjects.length + " of " + payload.projects.length + ' projects</div></div><div class="table-wrap"><table class="table"><thead><tr><th>Project</th><th>Status</th><th>Last Activity</th><th>Open Actions</th><th>Overdue</th><th>Next Milestone</th><th>Quick Actions</th></tr></thead><tbody>' +
-        (rows || '<tr><td colspan="7"><div class="empty">No projects match current search.</div></td></tr>') +
-        "</tbody></table></div></div>" +
-        '<div class="split"><div class="card"><h3 style="margin:0 0 10px">Activity Over Time (6 weeks)</h3><canvas id="activity-line" width="620" height="220"></canvas></div><div class="card"><h3 style="margin:0 0 10px">Commits by Project</h3><canvas id="activity-bars" width="310" height="220"></canvas></div></div>'
-      );
+      function renderDashboardPage() {
+        var totalVisible = visibleProjects.length;
+        var totalPages = Math.max(1, Math.ceil(totalVisible / pageSize));
+        var activeSearch = state.search ? state.search.trim() : "";
+        var hasActiveFilter = !!activeSearch;
+        if (currentPage > totalPages) {
+          currentPage = totalPages;
+        }
+        var startIdx = totalVisible === 0 ? 0 : (currentPage - 1) * pageSize;
+        var endIdxExclusive = Math.min(startIdx + pageSize, totalVisible);
+        var startLabel = totalVisible === 0 ? 0 : startIdx + 1;
+        var endLabel = totalVisible === 0 ? 0 : endIdxExclusive;
+        var pageProjects = visibleProjects.slice(startIdx, endIdxExclusive);
+        var rows = pageProjects.map(rowForProject).join("");
+        var pagination = totalVisible > pageSize
+          ? '<div class="dashboard-pagination row wrap"><button class="btn small" id="dashboard-prev" ' + (currentPage === 1 ? "disabled" : "") + '>Previous</button><span class="meta">Page ' + currentPage + ' of ' + totalPages + '</span><button class="btn small" id="dashboard-next" ' + (currentPage === totalPages ? "disabled" : "") + '>Next</button></div>'
+          : "";
+        var tableMeta = hasActiveFilter
+          ? 'Showing ' + startLabel + "-" + endLabel + " of " + totalVisible + ' matching search'
+          : 'Showing ' + startLabel + "-" + endLabel + " of " + totalVisible + ' projects';
+        var filterChip = hasActiveFilter
+          ? '<span class="badge info">Search: ' + UI.escapeHtml(activeSearch) + '</span>'
+          : "";
 
-      var weeks = ["W-5", "W-4", "W-3", "W-2", "W-1", "Now"];
-      var sums = [0, 0, 0, 0, 0, 0];
-      payload.projects.forEach(function (p) {
-        p.analytics.activityWeeks.forEach(function (v, idx) {
-          sums[idx] += v;
+        renderLayout(
+          '<div class="dashboard-head card"><div class="dashboard-head-inner"><div><h1 class="page-title dashboard-title">Supervisor Dashboard</h1><div class="meta">Portfolio overview, delivery health, and intervention-ready actions.</div></div><div class="dashboard-head-kpis"><span class="badge on-track">Visible projects: ' + visibleProjects.length + '</span><span class="badge at-risk">Overdue: ' + payload.stats.overdue + '</span><span class="badge info">Active students this week: ' + payload.stats.activeStudents + '</span></div></div></div>' +
+          '<div class="grid cards-5 dashboard-kpis" style="margin-bottom:14px">' +
+            metricCard("Total Projects", payload.stats.total) +
+            metricCard("On Track", payload.stats.onTrack) +
+            metricCard("At Risk", payload.stats.atRisk) +
+            metricCard("Behind", payload.stats.behind) +
+            metricCard("Overdue Action Items", payload.stats.overdue) +
+          "</div>" +
+          '<div class="card project-health-card" style="margin-bottom:14px"><div class="row wrap" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Project Health Table</h3><div class="row wrap">' + filterChip + '<div class="meta">' + tableMeta + '</div></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Project</th><th>Status</th><th>Last Activity</th><th>Open Actions</th><th>Overdue</th><th>Next Milestone</th><th>Quick Actions</th></tr></thead><tbody>' +
+          (rows || '<tr><td colspan="7"><div class="empty">No projects match current search.</div></td></tr>') +
+          "</tbody></table></div>" + pagination + "</div>" +
+          '<div class="split"><div class="card"><h3 style="margin:0 0 10px">Activity Over Time (6 weeks)</h3><canvas id="activity-line" width="620" height="220"></canvas></div><div class="card"><h3 style="margin:0 0 10px">Commits by Project</h3><canvas id="activity-bars" width="310" height="220"></canvas></div></div>'
+        );
+
+        var weeks = ["W-5", "W-4", "W-3", "W-2", "W-1", "Now"];
+        var sums = [0, 0, 0, 0, 0, 0];
+        payload.projects.forEach(function (p) {
+          p.analytics.activityWeeks.forEach(function (v, idx) {
+            sums[idx] += v;
+          });
         });
-      });
-      Charts.drawLineChart("activity-line", sums, weeks);
-      Charts.drawBars("activity-bars", payload.projects.slice(0, 5).map(function (p) {
-        return { label: p.title.split(" ")[0], value: p.analytics.commitsWeek };
-      }));
+        Charts.drawLineChart("activity-line", sums, weeks);
+        Charts.drawBars("activity-bars", payload.projects.slice(0, 5).map(function (p) {
+          return { label: p.title.split(" ")[0], value: p.analytics.commitsWeek };
+        }));
 
-      bindOpenProjectButtons();
+        var prev = el("dashboard-prev");
+        if (prev) {
+          prev.addEventListener("click", function () {
+            if (currentPage > 1) {
+              currentPage -= 1;
+              renderDashboardPage();
+            }
+          });
+        }
+        var next = el("dashboard-next");
+        if (next) {
+          next.addEventListener("click", function () {
+            if (currentPage < totalPages) {
+              currentPage += 1;
+              renderDashboardPage();
+            }
+          });
+        }
+        bindOpenProjectButtons();
+      }
+      renderDashboardPage();
     });
   }
 
