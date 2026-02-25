@@ -593,7 +593,7 @@
           : "";
 
         renderLayout(
-          '<div class="dashboard-head card"><div class="dashboard-head-inner"><div><h1 class="page-title dashboard-title">Supervisor Dashboard</h1><div class="meta">Portfolio overview, delivery health, and intervention-ready actions.</div></div><div class="dashboard-head-kpis"><span class="badge on-track">Visible projects: ' + visibleProjects.length + '</span><span class="badge at-risk">Overdue: ' + payload.stats.overdue + '</span><span class="badge info">Active students this week: ' + payload.stats.activeStudents + '</span></div></div></div>' +
+          '<div class="dashboard-head card"><div class="dashboard-head-inner"><div><h1 class="page-title dashboard-title">Supervisor Dashboard</h1></div><div class="dashboard-head-kpis"><span class="badge on-track">Visible projects: ' + visibleProjects.length + '</span><span class="badge at-risk">Overdue: ' + payload.stats.overdue + '</span><span class="badge info">Active students this week: ' + payload.stats.activeStudents + '</span></div></div></div>' +
           '<div class="grid cards-5 dashboard-kpis" style="margin-bottom:14px">' +
             metricCard("Total Projects", payload.stats.total) +
             metricCard("On Track", payload.stats.onTrack) +
