@@ -162,8 +162,7 @@
     var items = state.user.role === "SUPERVISOR"
       ? [
         { key: "dashboard", label: "Dashboard", hash: "#/dashboard" },
-        { key: "projects", label: "Projects", hash: "#/projects" },
-        { key: "new", label: "Create Project", hash: "#/projects/new" }
+        { key: "projects", label: "Projects", hash: "#/projects" }
       ]
       : [
         { key: "student", label: "Student Home", hash: "#/student" },
