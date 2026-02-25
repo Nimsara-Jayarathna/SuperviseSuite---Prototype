@@ -592,15 +592,23 @@
   }
 
   function bindOpenProjectButtons() {
-    document.querySelectorAll("[data-open-project]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var id = btn.getAttribute("data-open-project");
-        var tab = btn.getAttribute("data-open-tab");
+    document.querySelectorAll("[data-open-project]").forEach(function (node) {
+      var openProject = function () {
+        var id = node.getAttribute("data-open-project");
+        var tab = node.getAttribute("data-open-tab");
         var target = "#/projects/" + id;
         if (tab) {
           target += "?tab=" + tab;
         }
         Router.go(target);
+      };
+
+      node.addEventListener("click", openProject);
+      node.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openProject();
+        }
       });
     });
   }
@@ -636,7 +644,7 @@
         return matchQ && matchStatus && matchInteg;
       }).map(function (p) {
         var summary = Store.getProjectSummary(p.id) || { openActionItems: 0, overdueCount: 0, meetingCount: 0 };
-        return '<div class="card project-card">' +
+        return '<div class="card project-card project-card-link" data-open-project="' + p.id + '" role="button" tabindex="0">' +
           '<h3>' + UI.escapeHtml(p.title) + '</h3>' +
           '<div class="meta">Students: ' + p.studentIds.length + ' | Last activity: ' + UI.formatDateTime(p.analytics.lastActivityAt) + '</div>' +
           '<div class="meta">Milestone: ' + UI.formatDate(p.milestoneDate) + " • " + UI.escapeHtml(milestoneDeltaText(p.milestoneDate)) + '</div>' +
@@ -648,7 +656,6 @@
           integrationBadge("Comms", p.commsIntegration.status) +
           '</div>' +
           '<div class="meta">Open actions: ' + summary.openActionItems + " | Overdue: " + summary.overdueCount + " | Meetings: " + summary.meetingCount + '</div>' +
-          '<button class="btn" data-open-project="' + p.id + '">Open Project</button>' +
           "</div>";
       }).join("");
 
