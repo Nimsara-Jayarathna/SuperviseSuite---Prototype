@@ -2,8 +2,296 @@
   var DB_KEY = "supervise_prototype_db_v1";
   var SESSION_KEY = "supervise_prototype_session";
 
+  var LIFECYCLE_STATUSES = ["DRAFT", "ACTIVE", "AT_RISK", "BEHIND", "COMPLETED", "ARCHIVED", "CANCELLED"];
+  var ACTION_STATUSES = ["Todo", "In Progress", "Done"];
+  var PRIORITIES = ["LOW", "MEDIUM", "HIGH"];
+  var INTEGRATION_STATUSES = ["NOT_CONFIGURED", "CONFIGURED", "CONNECTED", "ERROR"];
+
   function clone(data) {
     return JSON.parse(JSON.stringify(data));
+  }
+
+  function nowIso() {
+    return new Date().toISOString();
+  }
+
+  function todayIsoDate() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function safeArray(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
+  function asPriority(value) {
+    var upper = String(value || "").toUpperCase();
+    return PRIORITIES.indexOf(upper) > -1 ? upper : "MEDIUM";
+  }
+
+  function lifecycleToLegacyStatus(status) {
+    if (status === "AT_RISK") {
+      return "At risk";
+    }
+    if (status === "BEHIND") {
+      return "Behind";
+    }
+    if (status === "ACTIVE") {
+      return "On track";
+    }
+    if (status === "COMPLETED") {
+      return "On track";
+    }
+    if (status === "ARCHIVED") {
+      return "On track";
+    }
+    if (status === "CANCELLED") {
+      return "Behind";
+    }
+    return "On track";
+  }
+
+  function legacyToLifecycleStatus(status) {
+    if (status === "At risk") {
+      return "AT_RISK";
+    }
+    if (status === "Behind") {
+      return "BEHIND";
+    }
+    if (status === "On track") {
+      return "ACTIVE";
+    }
+    if (LIFECYCLE_STATUSES.indexOf(status) > -1) {
+      return status;
+    }
+    return "DRAFT";
+  }
+
+  function isOverdueAction(item) {
+    if (!item || !item.dueDate || item.status === "Done") {
+      return false;
+    }
+    return new Date(item.dueDate) < new Date(todayIsoDate());
+  }
+
+  function isProjectMember(project, userId) {
+    if (!project || !userId) {
+      return false;
+    }
+    return safeArray(project.studentIds).indexOf(userId) > -1;
+  }
+
+  function ensureIntegrationModel(project) {
+    project.githubIntegration = project.githubIntegration || {};
+    project.jiraIntegration = project.jiraIntegration || {};
+    project.commsIntegration = project.commsIntegration || {};
+
+    project.githubUrl = String(project.githubUrl || project.githubIntegration.url || "").trim();
+    project.jiraProjectKey = String(project.jiraProjectKey || project.jiraIntegration.projectKey || "").trim().toUpperCase();
+    project.jiraBoardLink = String(project.jiraBoardLink || project.jiraIntegration.boardLink || "").trim();
+    project.commsLink = String(project.commsLink || project.commsIntegration.link || "").trim();
+
+    project.githubIntegration.url = project.githubUrl;
+    project.jiraIntegration.projectKey = project.jiraProjectKey;
+    project.jiraIntegration.boardLink = project.jiraBoardLink;
+    project.commsIntegration.link = project.commsLink;
+
+    project.githubIntegration.status = classifyGithubStatus(project.githubUrl);
+    project.jiraIntegration.status = classifyJiraStatus(project.jiraProjectKey, project.jiraBoardLink);
+    project.commsIntegration.status = classifyCommsStatus(project.commsLink);
+
+    project.githubIntegration.error = project.githubIntegration.status === "ERROR" ? "Invalid GitHub repository URL." : "";
+    project.jiraIntegration.error = project.jiraIntegration.status === "ERROR" ? "Invalid Jira project key or board URL." : "";
+    project.commsIntegration.error = project.commsIntegration.status === "ERROR" ? "Invalid communication link." : "";
+  }
+
+  function classifyGithubStatus(url) {
+    var value = String(url || "").trim();
+    if (!value) {
+      return "NOT_CONFIGURED";
+    }
+    return /^https?:\/\/(www\.)?github\.com\/[\w.-]+\/[\w.-]+\/?$/i.test(value) ? "CONNECTED" : "ERROR";
+  }
+
+  function classifyJiraStatus(projectKey, boardLink) {
+    var key = String(projectKey || "").trim();
+    var board = String(boardLink || "").trim();
+
+    if (!key && !board) {
+      return "NOT_CONFIGURED";
+    }
+
+    if (key && !/^[A-Z][A-Z0-9]{1,9}$/.test(key)) {
+      return "ERROR";
+    }
+
+    if (board && !/^https?:\/\/[\w.-]*jira[\w.-]*\//i.test(board)) {
+      return "ERROR";
+    }
+
+    if (key) {
+      return "CONNECTED";
+    }
+
+    return "CONFIGURED";
+  }
+
+  function classifyCommsStatus(link) {
+    var value = String(link || "").trim();
+    if (!value) {
+      return "NOT_CONFIGURED";
+    }
+    return /^https?:\/\/(meet\.google\.com|zoom\.us|teams\.microsoft\.com|discord\.com|chat\.whatsapp\.com)\//i.test(value) ? "CONNECTED" : "ERROR";
+  }
+
+  function normalizeActionItem(action, db) {
+    var created = String(action.createdAt || nowIso());
+    var assignee = action.assigneeId || action.ownerId || "";
+    action.assigneeId = assignee;
+    action.ownerId = assignee;
+    action.priority = asPriority(action.priority);
+    action.status = ACTION_STATUSES.indexOf(action.status) > -1 ? action.status : "Todo";
+    action.createdFromMeetingId = action.createdFromMeetingId || action.meetingId || null;
+    action.lastUpdatedAt = action.lastUpdatedAt || created;
+    action.lastUpdatedBy = action.lastUpdatedBy || action.ownerId || null;
+    action.evidenceLink = String(action.evidenceLink || "").trim();
+    action.comments = safeArray(action.comments);
+    action.notes = safeArray(action.notes);
+    action.isOfficial = action.isOfficial === true;
+    action.fieldsLocked = action.fieldsLocked === true;
+    action.createdAt = created;
+
+    if (!action.dueDate) {
+      action.dueDate = todayIsoDate();
+    }
+
+    if (db && db.projects) {
+      var project = db.projects.find(function (p) { return p.id === action.projectId; });
+      if (project && !isProjectMember(project, action.assigneeId)) {
+        action.assigneeId = safeArray(project.studentIds)[0] || action.assigneeId;
+        action.ownerId = action.assigneeId;
+      }
+    }
+
+    return action;
+  }
+
+  function normalizeMeeting(meeting) {
+    meeting.status = ["DRAFT", "SUBMITTED", "APPROVED"].indexOf(meeting.status) > -1 ? meeting.status : "DRAFT";
+    meeting.createdAt = meeting.createdAt || nowIso();
+    meeting.createdBy = meeting.createdBy || null;
+    meeting.submittedAt = meeting.submittedAt || null;
+    meeting.submittedBy = meeting.submittedBy || null;
+    meeting.approvedAt = meeting.approvedAt || null;
+    meeting.approvedBy = meeting.approvedBy || null;
+    meeting.actionItemIds = safeArray(meeting.actionItemIds);
+    return meeting;
+  }
+
+  function recomputeProjectDerived(project, db) {
+    var actions = db.actionItems.filter(function (a) { return a.projectId === project.id; });
+    var overdueCount = actions.filter(isOverdueAction).length;
+    var suggested = null;
+
+    if (project.milestoneDate && new Date(project.milestoneDate) < new Date(todayIsoDate()) && overdueCount > 0) {
+      suggested = "BEHIND";
+    } else if (overdueCount >= 2) {
+      suggested = "AT_RISK";
+    }
+
+    project.overdueCount = overdueCount;
+    project.healthSuggestedStatus = suggested;
+    project.openActionItems = actions.filter(function (a) { return a.status !== "Done"; }).length;
+    project.meetingCount = db.meetings.filter(function (m) { return m.projectId === project.id; }).length;
+    project.analytics = project.analytics || {};
+    project.analytics.lastActivityAt = project.analytics.lastActivityAt || nowIso();
+    project.analytics.activityWeeks = safeArray(project.analytics.activityWeeks);
+
+    while (project.analytics.activityWeeks.length < 6) {
+      project.analytics.activityWeeks.push(0);
+    }
+
+    if (project.analytics.activityWeeks.length > 6) {
+      project.analytics.activityWeeks = project.analytics.activityWeeks.slice(-6);
+    }
+
+    project.status = lifecycleToLegacyStatus(project.lifecycleStatus);
+  }
+
+  function normalizeProject(project, db) {
+    project.title = project.title || "Untitled Project";
+    project.studentIds = safeArray(project.studentIds);
+    project.lifecycleStatus = legacyToLifecycleStatus(project.lifecycleStatus || project.status);
+    project.createdAt = project.createdAt || nowIso();
+    project.createdBy = project.createdBy || null;
+    project.auditEvents = safeArray(project.auditEvents);
+    project.overdueCount = typeof project.overdueCount === "number" ? project.overdueCount : 0;
+    project.healthSuggestedStatus = project.healthSuggestedStatus || null;
+    project.meetingCount = typeof project.meetingCount === "number" ? project.meetingCount : 0;
+    project.openActionItems = typeof project.openActionItems === "number" ? project.openActionItems : 0;
+
+    project.analytics = project.analytics || {
+      commitsWeek: 0,
+      openIssues: 0,
+      jiraTodo: 0,
+      jiraInProgress: 0,
+      jiraDone: 0,
+      lastActivityAt: nowIso(),
+      activityWeeks: [0, 0, 0, 0, 0, 0],
+      contributions: []
+    };
+
+    project.analytics.contributions = safeArray(project.analytics.contributions);
+    if (!project.analytics.contributions.length && project.studentIds.length) {
+      project.analytics.contributions = project.studentIds.map(function (sid) {
+        return { userId: sid, commits: 0, prs: 0 };
+      });
+    }
+
+    ensureIntegrationModel(project);
+    recomputeProjectDerived(project, db);
+    return project;
+  }
+
+  function normalizeDb(db) {
+    if (!db.users) {
+      db.users = [];
+    }
+    if (!db.projects) {
+      db.projects = [];
+    }
+    if (!db.meetings) {
+      db.meetings = [];
+    }
+    if (!db.actionItems) {
+      db.actionItems = [];
+    }
+    if (!db.files) {
+      db.files = [];
+    }
+
+    db.users.forEach(function (u) {
+      if (!u.name && u.fullName) {
+        u.name = u.fullName;
+      }
+      if (!u.fullName && u.name) {
+        u.fullName = u.name;
+      }
+      if (!u.createdAt) {
+        u.createdAt = nowIso();
+      }
+    });
+
+    db.projects.forEach(function (p) {
+      normalizeProject(p, db);
+    });
+
+    db.meetings.forEach(function (m) {
+      normalizeMeeting(m);
+    });
+
+    db.actionItems.forEach(function (a) {
+      normalizeActionItem(a, db);
+    });
   }
 
   function loadDB() {
@@ -27,27 +315,9 @@
     var db = loadDB();
     if (!db || !db.users || !db.projects) {
       db = window.Seed.generateSeedData();
-      saveDB(db);
-    } else {
-      var dirty = false;
-      db.users.forEach(function (u) {
-        if (!u.name && u.fullName) {
-          u.name = u.fullName;
-          dirty = true;
-        }
-        if (!u.fullName && u.name) {
-          u.fullName = u.name;
-          dirty = true;
-        }
-        if (!u.createdAt) {
-          u.createdAt = new Date().toISOString();
-          dirty = true;
-        }
-      });
-      if (dirty) {
-        saveDB(db);
-      }
     }
+    normalizeDb(db);
+    saveDB(db);
     return db;
   }
 
@@ -64,7 +334,7 @@
   }
 
   function setSession(session) {
-    var now = new Date().toISOString();
+    var now = nowIso();
     var normalized = {
       userId: session && session.userId ? session.userId : null,
       role: session && session.role ? session.role : null,
@@ -93,7 +363,7 @@
     if (!user) {
       return null;
     }
-    var now = new Date().toISOString();
+    var now = nowIso();
     return setSession({
       userId: user.id,
       role: user.role,
@@ -146,7 +416,7 @@
       email: email,
       password: password,
       role: role,
-      createdAt: new Date().toISOString()
+      createdAt: nowIso()
     };
     db.users.push(rec);
     saveDB(db);
@@ -158,7 +428,7 @@
     if (!session || !session.userId) {
       return null;
     }
-    session.lastActiveAt = new Date().toISOString();
+    session.lastActiveAt = nowIso();
     return setSession(session);
   }
 
@@ -180,47 +450,167 @@
     return clone(db.projects.find(function (p) { return p.id === id; }) || null);
   }
 
-  function upsertProject(project) {
+  function addAuditEventInternal(db, projectId, type, byUserId, meta) {
+    var project = db.projects.find(function (p) { return p.id === projectId; });
+    if (!project) {
+      return null;
+    }
+    var event = {
+      id: "ev_" + Date.now() + "_" + Math.floor(Math.random() * 10000),
+      timestamp: nowIso(),
+      type: type,
+      byUserId: byUserId || null,
+      meta: meta || {}
+    };
+    project.auditEvents = safeArray(project.auditEvents);
+    project.auditEvents.push(event);
+    project.analytics.lastActivityAt = event.timestamp;
+    return event;
+  }
+
+  function addAuditEvent(projectId, type, byUserId, meta) {
+    var db = init();
+    var event = addAuditEventInternal(db, projectId, type, byUserId, meta);
+    if (!event) {
+      return null;
+    }
+    saveDB(db);
+    return clone(event);
+  }
+
+  function canTransitionProjectStatus(userRole, fromStatus, toStatus) {
+    if (LIFECYCLE_STATUSES.indexOf(fromStatus) === -1 || LIFECYCLE_STATUSES.indexOf(toStatus) === -1) {
+      return false;
+    }
+
+    if (userRole !== "SUPERVISOR") {
+      return false;
+    }
+
+    var transitions = {
+      DRAFT: ["ACTIVE", "AT_RISK", "BEHIND", "CANCELLED"],
+      ACTIVE: ["AT_RISK", "BEHIND", "COMPLETED", "CANCELLED"],
+      AT_RISK: ["ACTIVE", "BEHIND", "COMPLETED", "CANCELLED"],
+      BEHIND: ["ACTIVE", "AT_RISK", "COMPLETED", "CANCELLED"],
+      COMPLETED: ["ARCHIVED"],
+      ARCHIVED: [],
+      CANCELLED: ["ARCHIVED"]
+    };
+
+    if (fromStatus === toStatus) {
+      return true;
+    }
+
+    if (safeArray(transitions[fromStatus]).indexOf(toStatus) === -1) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function applyProjectStatusTransition(projectId, toStatus, userId) {
+    var db = init();
+    var project = db.projects.find(function (p) { return p.id === projectId; });
+    var user = db.users.find(function (u) { return u.id === userId; });
+
+    if (!project || !user) {
+      return { ok: false, message: "Project or user not found." };
+    }
+
+    if (!canTransitionProjectStatus(user.role, project.lifecycleStatus, toStatus)) {
+      return { ok: false, message: "Invalid status transition for your role." };
+    }
+
+    if (project.lifecycleStatus === "DRAFT" && toStatus === "ACTIVE" && project.commsIntegration.status !== "CONNECTED") {
+      return { ok: false, message: "Communication integration must be connected before activating." };
+    }
+
+    if (toStatus === "ARCHIVED" && ["COMPLETED", "CANCELLED"].indexOf(project.lifecycleStatus) === -1) {
+      return { ok: false, message: "Archive is allowed only after completion or cancellation." };
+    }
+
+    var fromStatus = project.lifecycleStatus;
+    project.lifecycleStatus = toStatus;
+    project.status = lifecycleToLegacyStatus(toStatus);
+    project.analytics.lastActivityAt = nowIso();
+
+    addAuditEventInternal(db, projectId, "STATUS_CHANGED", userId, {
+      fromStatus: fromStatus,
+      toStatus: toStatus
+    });
+
+    recomputeProjectDerived(project, db);
+    saveDB(db);
+    return { ok: true, project: clone(project) };
+  }
+
+  function upsertProject(project, actorId) {
     var db = init();
     var idx = db.projects.findIndex(function (p) { return p.id === project.id; });
+    normalizeProject(project, db);
+
     if (idx === -1) {
       db.projects.push(project);
     } else {
       db.projects[idx] = project;
     }
+
+    addAuditEventInternal(db, project.id, "INTEGRATION_UPDATED", actorId || project.createdBy || null, {
+      githubStatus: project.githubIntegration.status,
+      jiraStatus: project.jiraIntegration.status,
+      commsStatus: project.commsIntegration.status
+    });
+
     saveDB(db);
     return clone(project);
   }
 
   function createProject(payload, userId) {
+    var db = init();
     var p = {
       id: "p_" + Date.now(),
       title: payload.title,
       batch: payload.batch,
       semester: payload.semester,
       milestoneDate: payload.milestoneDate,
-      studentIds: payload.studentIds,
-      status: payload.status || "On track",
+      studentIds: safeArray(payload.studentIds),
+      lifecycleStatus: "DRAFT",
+      status: "On track",
       githubUrl: payload.githubUrl || "",
       jiraProjectKey: payload.jiraProjectKey || "",
       jiraBoardLink: payload.jiraBoardLink || "",
-      commsLink: payload.commsLink,
-      createdAt: new Date().toISOString(),
+      commsLink: payload.commsLink || "",
+      createdAt: nowIso(),
       createdBy: userId,
+      overdueCount: 0,
+      healthSuggestedStatus: null,
+      openActionItems: 0,
+      meetingCount: 0,
+      auditEvents: [],
       analytics: {
         commitsWeek: 0,
         openIssues: 0,
         jiraTodo: 0,
         jiraInProgress: 0,
         jiraDone: 0,
-        lastActivityAt: new Date().toISOString(),
+        lastActivityAt: nowIso(),
         activityWeeks: [0, 0, 0, 0, 0, 0],
-        contributions: payload.studentIds.map(function (sid) {
+        contributions: safeArray(payload.studentIds).map(function (sid) {
           return { userId: sid, commits: 0, prs: 0 };
         })
       }
     };
-    return upsertProject(p);
+
+    normalizeProject(p, db);
+    db.projects.push(p);
+
+    addAuditEventInternal(db, p.id, "PROJECT_CREATED", userId, {
+      lifecycleStatus: p.lifecycleStatus,
+      title: p.title
+    });
+
+    saveDB(db);
+    return clone(p);
   }
 
   function listMeetings(projectId) {
@@ -232,6 +622,10 @@
   function listActionItems(projectId) {
     var db = init();
     return clone(db.actionItems.filter(function (a) { return a.projectId === projectId; }))
+      .map(function (a) {
+        a.isOverdue = isOverdueAction(a);
+        return a;
+      })
       .sort(function (a, b) { return new Date(a.dueDate) - new Date(b.dueDate); });
   }
 
@@ -241,87 +635,426 @@
       .sort(function (a, b) { return new Date(b.uploadedAt) - new Date(a.uploadedAt); });
   }
 
-  function addMeeting(projectId, meetingData, actionData) {
-    var db = init();
-    var meetingId = "m_" + Date.now();
-    var actionIds = [];
-    actionData.forEach(function (item, index) {
-      var aid = "a_" + Date.now() + "_" + index;
-      actionIds.push(aid);
-      db.actionItems.push({
-        id: aid,
-        projectId: projectId,
-        meetingId: meetingId,
-        description: item.description,
-        ownerId: item.ownerId,
-        dueDate: item.dueDate,
-        priority: item.priority,
-        status: "Todo",
-        jira: item.jira || null,
-        createdAt: new Date().toISOString()
-      });
-    });
-
-    db.meetings.push({
-      id: meetingId,
-      projectId: projectId,
-      title: meetingData.title,
-      date: meetingData.date,
-      summary: meetingData.summary,
-      decisions: meetingData.decisions,
-      actionItemIds: actionIds,
-      createdAt: new Date().toISOString()
-    });
-
-    var project = db.projects.find(function (p) { return p.id === projectId; });
-    if (project) {
-      project.analytics.lastActivityAt = new Date().toISOString();
-      project.analytics.activityWeeks[5] += actionIds.length;
-      project.analytics.commitsWeek += 1;
+  function canEditActionItem(user, actionItem, project) {
+    if (!user || !actionItem || !project) {
+      return false;
     }
-
-    saveDB(db);
-    return { meetingId: meetingId, actionIds: actionIds };
+    if (user.role === "SUPERVISOR") {
+      return true;
+    }
+    return user.role === "STUDENT" && isProjectMember(project, user.id) && actionItem.assigneeId === user.id;
   }
 
-  function updateActionItemStatus(actionId, status) {
+  function validateActionItemTransition(actionItem, toStatus, payload) {
+    if (ACTION_STATUSES.indexOf(toStatus) === -1) {
+      return { ok: false, message: "Unsupported action item status." };
+    }
+
+    if (toStatus === "Done") {
+      var comment = String((payload && payload.comment) || "").trim();
+      var evidence = String((payload && payload.evidenceLink) || actionItem.evidenceLink || "").trim();
+      if (!comment && !evidence) {
+        return { ok: false, message: "Marking as Done requires a comment or evidence link." };
+      }
+    }
+
+    return { ok: true, message: "ok" };
+  }
+
+  function appendActionComment(item, actorId, commentText) {
+    var text = String(commentText || "").trim();
+    if (!text) {
+      return;
+    }
+    item.comments = safeArray(item.comments);
+    item.notes = safeArray(item.notes);
+    var entry = {
+      id: "note_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+      text: text,
+      byUserId: actorId || null,
+      createdAt: nowIso()
+    };
+    item.comments.push(entry);
+    item.notes.push(entry);
+  }
+
+  function updateActionItemStatus(actionId, status, actorId, payload) {
     var db = init();
     var item = db.actionItems.find(function (a) { return a.id === actionId; });
     if (!item) {
-      return null;
+      return { ok: false, message: "Action item not found." };
     }
+
+    var project = db.projects.find(function (p) { return p.id === item.projectId; });
+    var actor = db.users.find(function (u) { return u.id === actorId; });
+
+    if (actorId && !canEditActionItem(actor, item, project)) {
+      return { ok: false, message: "You cannot edit this action item." };
+    }
+
+    var transition = validateActionItemTransition(item, status, payload || {});
+    if (!transition.ok) {
+      return transition;
+    }
+
     item.status = status;
+    if (payload && payload.evidenceLink) {
+      item.evidenceLink = String(payload.evidenceLink).trim();
+    }
+    appendActionComment(item, actorId, payload && payload.comment);
+    item.lastUpdatedAt = nowIso();
+    item.lastUpdatedBy = actorId || item.lastUpdatedBy;
+
+    if (project) {
+      recomputeProjectDerived(project, db);
+      addAuditEventInternal(db, project.id, "ACTION_STATUS_CHANGED", actorId || null, {
+        actionId: item.id,
+        status: status
+      });
+    }
+
     saveDB(db);
-    return clone(item);
+    return { ok: true, item: clone(item) };
   }
 
-  function linkActionItemJira(actionId, jiraData) {
+  function updateActionItem(actionId, payload, actorId) {
     var db = init();
     var item = db.actionItems.find(function (a) { return a.id === actionId; });
     if (!item) {
-      return null;
+      return { ok: false, message: "Action item not found." };
     }
-    item.jira = jiraData;
+
+    var project = db.projects.find(function (p) { return p.id === item.projectId; });
+    var actor = db.users.find(function (u) { return u.id === actorId; });
+
+    if (!canEditActionItem(actor, item, project)) {
+      return { ok: false, message: "You cannot edit this action item." };
+    }
+
+    if (item.fieldsLocked) {
+      if (payload.assigneeId || payload.dueDate || payload.priority || payload.description) {
+        return { ok: false, message: "This approved meeting action item has locked fields." };
+      }
+    }
+
+    if (payload.assigneeId) {
+      if (!isProjectMember(project, payload.assigneeId)) {
+        return { ok: false, message: "Assignee must be a student in this project." };
+      }
+      item.assigneeId = payload.assigneeId;
+      item.ownerId = payload.assigneeId;
+    }
+
+    if (payload.dueDate) {
+      item.dueDate = payload.dueDate;
+    }
+
+    if (payload.priority) {
+      item.priority = asPriority(payload.priority);
+    }
+
+    if (payload.description) {
+      item.description = String(payload.description).trim();
+    }
+
+    if (payload.evidenceLink !== undefined) {
+      item.evidenceLink = String(payload.evidenceLink || "").trim();
+    }
+
+    appendActionComment(item, actorId, payload.comment);
+
+    item.lastUpdatedAt = nowIso();
+    item.lastUpdatedBy = actorId;
+
+    recomputeProjectDerived(project, db);
     saveDB(db);
-    return clone(item);
+    return { ok: true, item: clone(item) };
   }
 
-  function createMockJiraForAction(actionId, projectId) {
+  function linkActionItemJira(actionId, jiraData, actorId) {
+    var db = init();
+    var item = db.actionItems.find(function (a) { return a.id === actionId; });
+    if (!item) {
+      return { ok: false, message: "Action item not found." };
+    }
+
+    var project = db.projects.find(function (p) { return p.id === item.projectId; });
+    var actor = db.users.find(function (u) { return u.id === actorId; });
+
+    if (actorId && !canEditActionItem(actor, item, project)) {
+      return { ok: false, message: "You cannot link Jira for this action item." };
+    }
+
+    item.jira = jiraData;
+    item.lastUpdatedAt = nowIso();
+    item.lastUpdatedBy = actorId || item.lastUpdatedBy;
+
+    saveDB(db);
+    return { ok: true, item: clone(item) };
+  }
+
+  function createMockJiraForAction(actionId, projectId, actorId) {
     var db = init();
     var project = db.projects.find(function (p) { return p.id === projectId; });
     var action = db.actionItems.find(function (a) { return a.id === actionId; });
+    var actor = db.users.find(function (u) { return u.id === actorId; });
+
     if (!project || !action || !project.jiraProjectKey) {
-      return null;
+      return { ok: false, message: "Jira is not configured for this project." };
     }
+
+    if (actorId && !canEditActionItem(actor, action, project)) {
+      return { ok: false, message: "You cannot create Jira for this action item." };
+    }
+
     var num = Math.floor(100 + Math.random() * 900);
     var key = project.jiraProjectKey + "-" + num;
     action.jira = {
       key: key,
       url: "https://jira.example.com/browse/" + key
     };
+    action.lastUpdatedAt = nowIso();
+    action.lastUpdatedBy = actorId || action.lastUpdatedBy;
     project.analytics.openIssues += 1;
+
     saveDB(db);
-    return clone(action);
+    return { ok: true, item: clone(action) };
+  }
+
+  function ensureActionItemInput(project, rawAction) {
+    var assignee = rawAction.assigneeId || rawAction.ownerId;
+    var due = rawAction.dueDate;
+
+    if (!rawAction.description || !String(rawAction.description).trim()) {
+      return { ok: false, message: "Action item description is required." };
+    }
+
+    if (!assignee) {
+      return { ok: false, message: "Action item assignee is required." };
+    }
+
+    if (!isProjectMember(project, assignee)) {
+      return { ok: false, message: "Assignee must be part of the project." };
+    }
+
+    if (!due) {
+      return { ok: false, message: "Action item due date is required." };
+    }
+
+    return { ok: true };
+  }
+
+  function createMeeting(projectId, meetingPayload, userId) {
+    var db = init();
+    var project = db.projects.find(function (p) { return p.id === projectId; });
+    var user = db.users.find(function (u) { return u.id === userId; });
+
+    if (!project || !user) {
+      return { ok: false, message: "Project or user not found." };
+    }
+
+    if (user.role !== "SUPERVISOR" && !isProjectMember(project, userId)) {
+      return { ok: false, message: "You are not allowed to create meetings for this project." };
+    }
+
+    if (!meetingPayload.title || !meetingPayload.date || !meetingPayload.summary) {
+      return { ok: false, message: "Meeting title, date and summary are required." };
+    }
+
+    var meetingId = "m_" + Date.now();
+    var actionIds = [];
+    var rawActions = safeArray(meetingPayload.actionItems);
+
+    for (var i = 0; i < rawActions.length; i += 1) {
+      var raw = rawActions[i];
+      var validation = ensureActionItemInput(project, raw);
+      if (!validation.ok) {
+        return validation;
+      }
+
+      var actionId = "a_" + Date.now() + "_" + i;
+      var createdAt = nowIso();
+
+      db.actionItems.push(normalizeActionItem({
+        id: actionId,
+        projectId: projectId,
+        meetingId: meetingId,
+        createdFromMeetingId: meetingId,
+        description: String(raw.description).trim(),
+        assigneeId: raw.assigneeId || raw.ownerId,
+        ownerId: raw.assigneeId || raw.ownerId,
+        dueDate: raw.dueDate,
+        priority: raw.priority || "MEDIUM",
+        status: "Todo",
+        jira: raw.jira || null,
+        evidenceLink: raw.evidenceLink || "",
+        comments: [],
+        notes: [],
+        createdAt: createdAt,
+        lastUpdatedAt: createdAt,
+        lastUpdatedBy: userId,
+        isOfficial: false,
+        fieldsLocked: false
+      }, db));
+
+      actionIds.push(actionId);
+      addAuditEventInternal(db, projectId, "ACTION_CREATED", userId, {
+        actionId: actionId,
+        fromMeetingId: meetingId
+      });
+    }
+
+    db.meetings.push(normalizeMeeting({
+      id: meetingId,
+      projectId: projectId,
+      title: meetingPayload.title,
+      date: meetingPayload.date,
+      summary: meetingPayload.summary,
+      decisions: meetingPayload.decisions || "",
+      actionItemIds: actionIds,
+      status: "DRAFT",
+      createdAt: nowIso(),
+      createdBy: userId
+    }));
+
+    project.analytics.lastActivityAt = nowIso();
+    project.analytics.activityWeeks[5] += actionIds.length;
+    project.analytics.commitsWeek += 1;
+    recomputeProjectDerived(project, db);
+
+    addAuditEventInternal(db, projectId, "MEETING_CREATED", userId, {
+      meetingId: meetingId,
+      actionCount: actionIds.length
+    });
+
+    saveDB(db);
+    return { ok: true, meetingId: meetingId, actionIds: actionIds };
+  }
+
+  function submitMeeting(projectId, meetingId, userId) {
+    var db = init();
+    var project = db.projects.find(function (p) { return p.id === projectId; });
+    var meeting = db.meetings.find(function (m) { return m.id === meetingId && m.projectId === projectId; });
+    var user = db.users.find(function (u) { return u.id === userId; });
+
+    if (!project || !meeting || !user) {
+      return { ok: false, message: "Project, meeting, or user not found." };
+    }
+
+    if (meeting.status !== "DRAFT") {
+      return { ok: false, message: "Only draft meetings can be submitted." };
+    }
+
+    if (user.role !== "SUPERVISOR" && !isProjectMember(project, userId)) {
+      return { ok: false, message: "Only project members can submit this meeting." };
+    }
+
+    meeting.status = "SUBMITTED";
+    meeting.submittedAt = nowIso();
+    meeting.submittedBy = userId;
+
+    addAuditEventInternal(db, projectId, "MEETING_SUBMITTED", userId, {
+      meetingId: meetingId
+    });
+
+    saveDB(db);
+    return { ok: true, meeting: clone(meeting) };
+  }
+
+  function approveMeeting(projectId, meetingId, userId) {
+    var db = init();
+    var project = db.projects.find(function (p) { return p.id === projectId; });
+    var meeting = db.meetings.find(function (m) { return m.id === meetingId && m.projectId === projectId; });
+    var user = db.users.find(function (u) { return u.id === userId; });
+
+    if (!project || !meeting || !user) {
+      return { ok: false, message: "Project, meeting, or user not found." };
+    }
+
+    if (user.role !== "SUPERVISOR") {
+      return { ok: false, message: "Only supervisors can approve meetings." };
+    }
+
+    if (meeting.status !== "SUBMITTED") {
+      return { ok: false, message: "Only submitted meetings can be approved." };
+    }
+
+    meeting.status = "APPROVED";
+    meeting.approvedAt = nowIso();
+    meeting.approvedBy = userId;
+
+    db.actionItems.forEach(function (a) {
+      if (a.projectId === projectId && a.createdFromMeetingId === meetingId) {
+        a.isOfficial = true;
+        a.fieldsLocked = true;
+        a.lastUpdatedAt = nowIso();
+        a.lastUpdatedBy = userId;
+      }
+    });
+
+    recomputeProjectDerived(project, db);
+
+    addAuditEventInternal(db, projectId, "MEETING_APPROVED", userId, {
+      meetingId: meetingId
+    });
+
+    saveDB(db);
+    return { ok: true, meeting: clone(meeting) };
+  }
+
+  function addMeeting(projectId, meetingData, actionData, userId) {
+    var payload = {
+      title: meetingData.title,
+      date: meetingData.date,
+      summary: meetingData.summary,
+      decisions: meetingData.decisions,
+      actionItems: safeArray(actionData).map(function (item) {
+        return {
+          description: item.description,
+          assigneeId: item.assigneeId || item.ownerId,
+          ownerId: item.assigneeId || item.ownerId,
+          dueDate: item.dueDate,
+          priority: item.priority,
+          jira: item.jira || null
+        };
+      })
+    };
+    return createMeeting(projectId, payload, userId);
+  }
+
+  function updateProjectIntegrations(projectId, payload, actorId) {
+    var db = init();
+    var project = db.projects.find(function (p) { return p.id === projectId; });
+
+    if (!project) {
+      return { ok: false, message: "Project not found." };
+    }
+
+    if (payload.githubUrl !== undefined) {
+      project.githubUrl = String(payload.githubUrl || "").trim();
+    }
+
+    if (payload.jiraProjectKey !== undefined) {
+      project.jiraProjectKey = String(payload.jiraProjectKey || "").trim().toUpperCase();
+    }
+
+    if (payload.jiraBoardLink !== undefined) {
+      project.jiraBoardLink = String(payload.jiraBoardLink || "").trim();
+    }
+
+    if (payload.commsLink !== undefined) {
+      project.commsLink = String(payload.commsLink || "").trim();
+    }
+
+    ensureIntegrationModel(project);
+    addAuditEventInternal(db, projectId, "INTEGRATION_UPDATED", actorId || null, {
+      githubStatus: project.githubIntegration.status,
+      jiraStatus: project.jiraIntegration.status,
+      commsStatus: project.commsIntegration.status
+    });
+
+    saveDB(db);
+    return { ok: true, project: clone(project) };
   }
 
   function addFile(projectId, fileMeta) {
@@ -332,32 +1065,65 @@
       name: fileMeta.name,
       size: fileMeta.size,
       type: fileMeta.type,
-      uploadedAt: new Date().toISOString(),
+      uploadedAt: nowIso(),
       uploaderId: fileMeta.uploaderId
     };
     db.files.push(rec);
+    addAuditEventInternal(db, projectId, "FILE_ADDED", fileMeta.uploaderId || null, {
+      fileId: rec.id,
+      fileName: rec.name
+    });
     saveDB(db);
     return clone(rec);
   }
 
+  function getProjectSummary(projectId) {
+    var db = init();
+    var project = db.projects.find(function (p) { return p.id === projectId; });
+    if (!project) {
+      return null;
+    }
+
+    var actions = db.actionItems.filter(function (a) { return a.projectId === projectId; });
+    var meetings = db.meetings.filter(function (m) { return m.projectId === projectId; });
+    var open = actions.filter(function (a) { return a.status !== "Done"; }).length;
+    var overdue = actions.filter(isOverdueAction).length;
+
+    return {
+      openActionItems: open,
+      overdueCount: overdue,
+      meetingCount: meetings.length
+    };
+  }
+
   function statsForDashboard(projects) {
     var db = init();
+    var projectIds = projects.map(function (p) { return p.id; });
     var total = projects.length;
-    var onTrack = projects.filter(function (p) { return p.status === "On track"; }).length;
-    var atRisk = projects.filter(function (p) { return p.status === "At risk"; }).length;
-    var behind = projects.filter(function (p) { return p.status === "Behind"; }).length;
+    var onTrack = projects.filter(function (p) { return p.lifecycleStatus === "ACTIVE"; }).length;
+    var atRisk = projects.filter(function (p) { return p.lifecycleStatus === "AT_RISK"; }).length;
+    var behind = projects.filter(function (p) { return p.lifecycleStatus === "BEHIND"; }).length;
     var overdue = db.actionItems.filter(function (a) {
-      return new Date(a.dueDate) < new Date() && a.status !== "Done";
+      return projectIds.indexOf(a.projectId) > -1 && isOverdueAction(a);
     }).length;
+
     var thisWeekCutoff = new Date();
     thisWeekCutoff.setDate(thisWeekCutoff.getDate() - 7);
+
     var activeStudents = new Set(
       db.actionItems.filter(function (a) {
-        return new Date(a.createdAt) >= thisWeekCutoff;
-      }).map(function (a) { return a.ownerId; })
+        return projectIds.indexOf(a.projectId) > -1 && new Date(a.lastUpdatedAt || a.createdAt) >= thisWeekCutoff;
+      }).map(function (a) { return a.assigneeId || a.ownerId; })
     ).size;
 
-    return { total: total, onTrack: onTrack, atRisk: atRisk, behind: behind, overdue: overdue, activeStudents: activeStudents };
+    return {
+      total: total,
+      onTrack: onTrack,
+      atRisk: atRisk,
+      behind: behind,
+      overdue: overdue,
+      activeStudents: activeStudents
+    };
   }
 
   function simulate(data, delay) {
@@ -380,8 +1146,22 @@
 
   function listMyActionItems(userId) {
     var db = init();
-    return clone(db.actionItems.filter(function (a) { return a.ownerId === userId; }))
+    return clone(db.actionItems.filter(function (a) { return a.assigneeId === userId || a.ownerId === userId; }))
+      .map(function (a) {
+        a.isOverdue = isOverdueAction(a);
+        return a;
+      })
       .sort(function (a, b) { return new Date(a.dueDate) - new Date(b.dueDate); });
+  }
+
+  function listProjectAuditEvents(projectId) {
+    var project = getProjectById(projectId);
+    if (!project) {
+      return [];
+    }
+    return safeArray(project.auditEvents).slice().sort(function (a, b) {
+      return new Date(b.timestamp) - new Date(a.timestamp);
+    });
   }
 
   window.Store = {
@@ -399,18 +1179,32 @@
     getProjectById: getProjectById,
     createProject: createProject,
     upsertProject: upsertProject,
+    canTransitionProjectStatus: canTransitionProjectStatus,
+    applyProjectStatusTransition: applyProjectStatusTransition,
+    updateProjectIntegrations: updateProjectIntegrations,
+    addAuditEvent: addAuditEvent,
     listMeetings: listMeetings,
     listActionItems: listActionItems,
     listFiles: listFiles,
+    createMeeting: createMeeting,
+    submitMeeting: submitMeeting,
+    approveMeeting: approveMeeting,
     addMeeting: addMeeting,
+    canEditActionItem: canEditActionItem,
+    validateActionItemTransition: validateActionItemTransition,
+    updateActionItem: updateActionItem,
     updateActionItemStatus: updateActionItemStatus,
     linkActionItemJira: linkActionItemJira,
     createMockJiraForAction: createMockJiraForAction,
     addFile: addFile,
+    getProjectSummary: getProjectSummary,
     statsForDashboard: statsForDashboard,
     simulate: simulate,
     listStudents: listStudents,
     getMeetingById: getMeetingById,
-    listMyActionItems: listMyActionItems
+    listMyActionItems: listMyActionItems,
+    listProjectAuditEvents: listProjectAuditEvents,
+    isOverdueAction: isOverdueAction,
+    lifecycleToLegacyStatus: lifecycleToLegacyStatus
   };
 })();

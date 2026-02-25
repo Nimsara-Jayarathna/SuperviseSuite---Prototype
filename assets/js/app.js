@@ -32,6 +32,71 @@
     return role === "SUPERVISOR" ? "#/dashboard" : "#/student";
   }
 
+  function badgeClassForLifecycle(status) {
+    if (status === "ACTIVE" || status === "COMPLETED" || status === "ARCHIVED") {
+      return "on-track";
+    }
+    if (status === "AT_RISK" || status === "DRAFT") {
+      return "at-risk";
+    }
+    return "behind";
+  }
+
+  function lifecycleBadge(status) {
+    return '<span class="badge ' + badgeClassForLifecycle(status) + '">' + UI.escapeHtml(String(status || "DRAFT").replace("_", " ")) + "</span>";
+  }
+
+  function meetingStatusBadge(status) {
+    if (status === "APPROVED") {
+      return '<span class="badge on-track">APPROVED</span>';
+    }
+    if (status === "SUBMITTED") {
+      return '<span class="badge at-risk">SUBMITTED</span>';
+    }
+    return '<span class="badge behind">DRAFT</span>';
+  }
+
+  function integrationBadge(name, status) {
+    var cls = "at-risk";
+    if (status === "CONNECTED") {
+      cls = "on-track";
+    } else if (status === "ERROR" || status === "NOT_CONFIGURED") {
+      cls = "behind";
+    }
+    return '<span class="badge ' + cls + '">' + UI.escapeHtml(name + ": " + status) + "</span>";
+  }
+
+  function milestoneDeltaText(dateValue) {
+    if (!dateValue) {
+      return "No milestone set";
+    }
+    var target = new Date(dateValue);
+    var today = new Date(new Date().toISOString().slice(0, 10));
+    var diff = Math.floor((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (diff < 0) {
+      return "Overdue by " + Math.abs(diff) + " day(s)";
+    }
+    if (diff === 0) {
+      return "Due today";
+    }
+    return diff + " day(s) left";
+  }
+
+  function eventTypeLabel(type) {
+    var map = {
+      PROJECT_CREATED: "Project created",
+      STATUS_CHANGED: "Status changed",
+      MEETING_CREATED: "Meeting drafted",
+      MEETING_SUBMITTED: "Meeting submitted",
+      MEETING_APPROVED: "Meeting approved",
+      ACTION_CREATED: "Action item created",
+      ACTION_STATUS_CHANGED: "Action status changed",
+      FILE_ADDED: "File added",
+      INTEGRATION_UPDATED: "Integration updated"
+    };
+    return map[type] || type;
+  }
+
   function getSessionState() {
     var session = Store.getSession();
     var authenticated = !!(session && session.userId && session.role);
@@ -474,17 +539,18 @@
 
     Store.simulate({ projects: projects, stats: Store.statsForDashboard(projects) }).then(function (payload) {
       var rows = payload.projects.filter(function (p) { return projectMatchesSearch(p, users); }).map(function (p) {
-        var integration = !p.githubUrl && !p.jiraProjectKey;
+        var summary = Store.getProjectSummary(p.id) || { openActionItems: 0, overdueCount: 0, meetingCount: 0 };
+        var hasIntegrationIssues = p.githubIntegration.status !== "CONNECTED" || p.jiraIntegration.status !== "CONNECTED" || p.commsIntegration.status !== "CONNECTED";
         return '<tr>' +
           '<td>' + UI.escapeHtml(p.title) + '</td>' +
-          '<td>' + UI.statusBadge(p.status) + '</td>' +
+          '<td>' + lifecycleBadge(p.lifecycleStatus) + (p.healthSuggestedStatus ? ' <span class="badge at-risk">Suggested ' + UI.escapeHtml(p.healthSuggestedStatus) + "</span>" : "") + '</td>' +
           '<td>' + UI.formatDateTime(p.analytics.lastActivityAt) + '</td>' +
-          '<td>' + p.analytics.commitsWeek + '</td>' +
-          '<td>' + p.analytics.openIssues + '</td>' +
-          '<td>' + UI.formatDate(p.milestoneDate) + '</td>' +
+          '<td>' + summary.openActionItems + '</td>' +
+          '<td>' + summary.overdueCount + '</td>' +
+          '<td>' + UI.formatDate(p.milestoneDate) + '<div class="meta">' + milestoneDeltaText(p.milestoneDate) + '</div></td>' +
           '<td><button class="btn small" data-open-project="' + p.id + '">Open</button> <button class="btn small" data-open-tab="meetings" data-open-project="' + p.id + '">Meetings</button> <button class="btn small" data-open-tab="files" data-open-project="' + p.id + '">Files</button></td>' +
           "</tr>" +
-          (integration ? '<tr><td colspan="7"><div class="notice">Integrations not configured for this project.</div></td></tr>' : "");
+          (hasIntegrationIssues ? '<tr><td colspan="7"><div class="notice">One or more integrations are not fully connected.</div></td></tr>' : "");
       }).join("");
 
       renderLayout(
@@ -498,9 +564,9 @@
         "</div>" +
         '<div class="grid cards-4" style="margin-bottom:14px">' +
           metricCard("Active Students This Week", payload.stats.activeStudents) +
-          '<div class="card" style="grid-column: span 3"><div class="metric-label">Integration Health</div><div class="meta">Projects with missing GitHub/Jira setup show gentle warnings in the table.</div></div>' +
+          '<div class="card" style="grid-column: span 3"><div class="metric-label">Lifecycle Model</div><div class="meta">KPIs map ACTIVE to On Track, AT_RISK to At Risk, and BEHIND to Behind.</div></div>' +
         "</div>" +
-        '<div class="card" style="margin-bottom:14px"><h3 style="margin:0 0 8px">Project Health Table</h3><div class="table-wrap"><table class="table"><thead><tr><th>Project</th><th>Status</th><th>Last Activity</th><th>Commits This Week</th><th>Open Jira</th><th>Next Milestone</th><th>Quick Actions</th></tr></thead><tbody>' +
+        '<div class="card" style="margin-bottom:14px"><h3 style="margin:0 0 8px">Project Health Table</h3><div class="table-wrap"><table class="table"><thead><tr><th>Project</th><th>Status</th><th>Last Activity</th><th>Open Actions</th><th>Overdue</th><th>Next Milestone</th><th>Quick Actions</th></tr></thead><tbody>' +
         (rows || '<tr><td colspan="7"><div class="empty">No projects match current search.</div></td></tr>') +
         "</tbody></table></div></div>" +
         '<div class="split"><div class="card"><h3 style="margin:0 0 10px">Activity Over Time (6 weeks)</h3><canvas id="activity-line" width="620" height="220"></canvas></div><div class="card"><h3 style="margin:0 0 10px">Commits by Project</h3><canvas id="activity-bars" width="310" height="220"></canvas></div></div>'
@@ -548,7 +614,7 @@
       title(state.user.role === "SUPERVISOR" ? "Projects" : "My Projects") +
       '<div class="card" style="margin-bottom:14px"><div class="row wrap">' +
       '<input id="project-search" placeholder="Search by title/student" style="max-width:240px" value="' + UI.escapeHtml(state.search) + '" />' +
-      '<select id="filter-status" style="max-width:180px"><option value="">All Statuses</option><option>On track</option><option>At risk</option><option>Behind</option></select>' +
+      '<select id="filter-status" style="max-width:180px"><option value="">All Lifecycle</option><option value="DRAFT">DRAFT</option><option value="ACTIVE">ACTIVE</option><option value="AT_RISK">AT_RISK</option><option value="BEHIND">BEHIND</option><option value="COMPLETED">COMPLETED</option><option value="ARCHIVED">ARCHIVED</option></select>' +
       '<select id="filter-integration" style="max-width:220px"><option value="">All Integrations</option><option value="github">GitHub Connected</option><option value="jira">Jira Connected</option><option value="none">No Integrations</option></select>' +
       (state.user.role === "SUPERVISOR" ? '<button class="btn primary" id="new-project-btn">New Project</button>' : "") +
       "</div></div>" +
@@ -563,21 +629,33 @@
       var html = projects.filter(function (p) {
         var names = p.studentIds.map(function (sid) { var u = byId(users, sid); return u ? u.name.toLowerCase() : ""; }).join(" ");
         var matchQ = !q || p.title.toLowerCase().indexOf(q) > -1 || names.indexOf(q) > -1;
-        var matchStatus = !status || p.status === status;
-        var matchInteg = !integ || (integ === "github" && !!p.githubUrl) || (integ === "jira" && !!p.jiraProjectKey) || (integ === "none" && !p.githubUrl && !p.jiraProjectKey);
+        var matchStatus = !status || p.lifecycleStatus === status;
+        var matchInteg = !integ ||
+          (integ === "github" && p.githubIntegration.status === "CONNECTED") ||
+          (integ === "jira" && p.jiraIntegration.status === "CONNECTED") ||
+          (integ === "none" && p.githubIntegration.status === "NOT_CONFIGURED" && p.jiraIntegration.status === "NOT_CONFIGURED" && p.commsIntegration.status === "NOT_CONFIGURED");
         return matchQ && matchStatus && matchInteg;
       }).map(function (p) {
+        var summary = Store.getProjectSummary(p.id) || { openActionItems: 0, overdueCount: 0, meetingCount: 0 };
         return '<div class="card project-card">' +
           '<h3>' + UI.escapeHtml(p.title) + '</h3>' +
           '<div class="meta">Students: ' + p.studentIds.length + ' | Last activity: ' + UI.formatDateTime(p.analytics.lastActivityAt) + '</div>' +
-          '<div class="row wrap" style="margin:8px 0">' + UI.statusBadge(p.status) +
-          '<span class="badge ' + (p.githubUrl ? "on-track" : "behind") + '">GitHub: ' + (p.githubUrl ? "Connected" : "Not configured") + '</span>' +
-          '<span class="badge ' + (p.jiraProjectKey ? "on-track" : "behind") + '">Jira: ' + (p.jiraProjectKey ? "Connected" : "Not configured") + "</span></div>" +
+          '<div class="meta">Milestone: ' + UI.formatDate(p.milestoneDate) + " • " + UI.escapeHtml(milestoneDeltaText(p.milestoneDate)) + '</div>' +
+          '<div class="row wrap" style="margin:8px 0">' +
+          lifecycleBadge(p.lifecycleStatus) +
+          (p.healthSuggestedStatus ? '<span class="badge at-risk">Suggested: ' + UI.escapeHtml(p.healthSuggestedStatus) + '</span>' : "") +
+          integrationBadge("GitHub", p.githubIntegration.status) +
+          integrationBadge("Jira", p.jiraIntegration.status) +
+          integrationBadge("Comms", p.commsIntegration.status) +
+          '</div>' +
+          '<div class="meta">Open actions: ' + summary.openActionItems + " | Overdue: " + summary.overdueCount + " | Meetings: " + summary.meetingCount + '</div>' +
           '<button class="btn" data-open-project="' + p.id + '">Open Project</button>' +
           "</div>";
       }).join("");
 
-      el("projects-grid").innerHTML = html || '<div class="empty">No projects found.</div>';
+      el("projects-grid").innerHTML = html || (state.user.role === "SUPERVISOR"
+        ? '<div class="empty">No projects yet. Create your first project.</div>'
+        : '<div class="empty">No assigned projects yet. Contact your supervisor.</div>');
       bindOpenProjectButtons();
     }
 
@@ -703,9 +781,13 @@
     var meetings = Store.listMeetings(projectId);
     var actions = Store.listActionItems(projectId);
     var files = Store.listFiles(projectId);
+    var summary = Store.getProjectSummary(projectId) || { openActionItems: 0, overdueCount: 0, meetingCount: 0 };
+    var auditEvents = Store.listProjectAuditEvents(projectId).slice(0, 10);
     var tabs = ["overview", "activity", "meetings", "action-items", "files"];
     var currentTab = tabs.indexOf(activeTab) > -1 ? activeTab : "overview";
     var canEdit = state.user.role === "SUPERVISOR";
+    var isStudentMember = state.user.role === "STUDENT" && project.studentIds.indexOf(state.user.id) > -1;
+    var canManageMeetings = canEdit || isStudentMember;
 
     function tabButton(t, label) {
       return '<button class="tab ' + (currentTab === t ? "active" : "") + '" data-tab="' + t + '">' + label + "</button>";
@@ -732,21 +814,46 @@
     if (currentTab === "overview") {
       tabBody.innerHTML = '<div class="split"><div class="card">' +
         '<h3 style="margin:0 0 10px">Project Info</h3>' +
-        '<div class="kv"><div>Batch</div><div>' + UI.escapeHtml(project.batch) + '</div><div>Semester</div><div>' + UI.escapeHtml(project.semester) + '</div><div>Milestone</div><div>' + UI.formatDate(project.milestoneDate) + '</div><div>Status</div><div>' + UI.statusBadge(project.status) + '</div></div>' +
+        '<div class="kv"><div>Batch</div><div>' + UI.escapeHtml(project.batch) + '</div><div>Semester</div><div>' + UI.escapeHtml(project.semester) + '</div><div>Milestone</div><div>' + UI.formatDate(project.milestoneDate) + ' <span class="meta">(' + UI.escapeHtml(milestoneDeltaText(project.milestoneDate)) + ')</span></div><div>Lifecycle</div><div>' + lifecycleBadge(project.lifecycleStatus) + (project.healthSuggestedStatus ? ' <span class="badge at-risk">Suggested ' + UI.escapeHtml(project.healthSuggestedStatus) + '</span>' : "") + '</div><div>Open Action Items</div><div>' + summary.openActionItems + '</div><div>Overdue</div><div>' + summary.overdueCount + '</div></div>' +
         '<h4>Members</h4><div class="row wrap">' + project.studentIds.map(function (sid) {
           var s = byId(students, sid);
           return '<span class="badge on-track">' + UI.escapeHtml(s ? s.name : sid) + '</span>';
         }).join("") + '</div>' +
-        '<div style="margin-top:12px"><a class="btn primary" href="' + UI.escapeHtml(project.commsLink) + '" target="_blank" rel="noreferrer">Open Communication Channel</a></div>' +
+        (project.commsLink ? '<div style="margin-top:12px"><a class="btn primary" href="' + UI.escapeHtml(project.commsLink) + '" target="_blank" rel="noreferrer">Open Communication Channel</a></div>' : "") +
+        (canEdit ? '<div style="margin-top:12px"><label class="meta">Transition Lifecycle</label><div class="row"><select id="project-status-next"><option>DRAFT</option><option>ACTIVE</option><option>AT_RISK</option><option>BEHIND</option><option>COMPLETED</option><option>ARCHIVED</option><option>CANCELLED</option></select><button class="btn small" id="project-status-apply">Apply</button></div></div>' : "") +
         '</div><div class="card"><h3 style="margin:0 0 10px">Integrations</h3>' +
-        '<div class="meta">GitHub: ' + (project.githubUrl ? "Connected" : "Not configured") + '</div>' +
-        '<div class="meta" style="margin-bottom:10px">Jira: ' + (project.jiraProjectKey ? "Connected" : "Not configured") + '</div>' +
+        '<div class="row wrap" style="margin-bottom:8px">' +
+        integrationBadge("GitHub", project.githubIntegration.status) +
+        integrationBadge("Jira", project.jiraIntegration.status) +
+        integrationBadge("Comms", project.commsIntegration.status) +
+        '</div>' +
+        '<div class="meta">GitHub URL: ' + UI.escapeHtml(project.githubUrl || "-") + '</div>' +
+        '<div class="meta">Jira Key: ' + UI.escapeHtml(project.jiraProjectKey || "-") + '</div>' +
+        '<div class="meta" style="margin-bottom:10px">Comms Link: ' + UI.escapeHtml(project.commsLink || "-") + '</div>' +
         (project.githubUrl ? '<a href="' + UI.escapeHtml(project.githubUrl) + '" target="_blank" class="btn small">Repo</a>' : "") +
         (project.jiraBoardLink ? ' <a href="' + UI.escapeHtml(project.jiraBoardLink) + '" target="_blank" class="btn small">Board</a>' : "") +
         (canEdit ? '<div style="margin-top:10px"><button class="btn" id="edit-connections">Connect Integrations</button></div>' : "") +
-        '</div></div>';
+        '</div></div>' +
+        '<div class="card" style="margin-top:12px"><h3 style="margin:0 0 10px">Activity Timeline</h3>' +
+        (auditEvents.length ? '<div>' + auditEvents.map(function (ev) {
+          var actor = Store.getUserById(ev.byUserId);
+          return '<div style="border-bottom:1px solid var(--border);padding:8px 0"><strong>' + UI.escapeHtml(eventTypeLabel(ev.type)) + '</strong><div class="meta">' + UI.formatDateTime(ev.timestamp) + ' by ' + UI.escapeHtml(actor ? actor.name : "System") + '</div></div>';
+        }).join("") + '</div>' : '<div class="empty">No activity events yet.</div>') +
+        '</div>';
 
       if (canEdit) {
+        el("project-status-next").value = project.lifecycleStatus;
+        el("project-status-apply").addEventListener("click", function () {
+          var next = el("project-status-next").value;
+          var res = Store.applyProjectStatusTransition(project.id, next, state.user.id);
+          if (!res.ok) {
+            UI.toast(res.message || "Status transition failed.");
+            return;
+          }
+          UI.toast("Project status updated.");
+          renderProjectView(project.id, "overview");
+        });
+
         el("edit-connections").addEventListener("click", function () {
           openIntegrationModal(project);
         });
@@ -770,18 +877,44 @@
     }
 
     if (currentTab === "meetings") {
-      tabBody.innerHTML = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="margin:0">Meetings</h3>' + (canEdit ? '<button class="btn primary" id="add-meeting">Add Meeting Minutes</button>' : "") + '</div>' +
-      '<div class="table-wrap"><table class="table"><thead><tr><th>Title</th><th>Date</th><th>Summary</th><th>Actions</th></tr></thead><tbody>' +
+      tabBody.innerHTML = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="margin:0">Meetings</h3>' + (canManageMeetings ? '<button class="btn primary" id="add-meeting">Add Meeting Minutes</button>' : "") + '</div>' +
+      '<div class="table-wrap"><table class="table"><thead><tr><th>Title</th><th>Date</th><th>Status</th><th>Summary</th><th>Actions</th></tr></thead><tbody>' +
       (meetings.map(function (m) {
-        return '<tr><td>' + UI.escapeHtml(m.title) + '</td><td>' + UI.formatDate(m.date) + '</td><td>' + UI.escapeHtml(m.summary.slice(0, 70)) + '</td><td><button class="btn small" data-view-meeting="' + m.id + '">View</button></td></tr>';
-      }).join("") || '<tr><td colspan="4"><div class="empty">No meetings yet.</div></td></tr>') +
+        return '<tr><td>' + UI.escapeHtml(m.title) + '</td><td>' + UI.formatDate(m.date) + '</td><td>' + meetingStatusBadge(m.status) + '</td><td>' + UI.escapeHtml(m.summary.slice(0, 70)) + '</td><td><button class="btn small" data-view-meeting="' + m.id + '">View</button>' +
+          ((m.status === "DRAFT" && canManageMeetings) ? ' <button class="btn small" data-submit-meeting="' + m.id + '">Submit</button>' : "") +
+          ((m.status === "SUBMITTED" && canEdit) ? ' <button class="btn small" data-approve-meeting="' + m.id + '">Approve</button>' : "") +
+          ((m.status === "APPROVED") ? ' <span class="notice"> Locked</span>' : "") +
+          '</td></tr>';
+      }).join("") || '<tr><td colspan="5"><div class="empty">No meetings yet.</div></td></tr>') +
       '</tbody></table></div>';
 
-      if (canEdit) {
+      if (canManageMeetings) {
         el("add-meeting").addEventListener("click", function () {
           openMeetingModal(project, students);
         });
       }
+      document.querySelectorAll("[data-submit-meeting]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var res = Store.submitMeeting(project.id, btn.getAttribute("data-submit-meeting"), state.user.id);
+          if (!res.ok) {
+            UI.toast(res.message || "Unable to submit meeting.");
+            return;
+          }
+          UI.toast("Meeting submitted.");
+          renderProjectView(project.id, "meetings");
+        });
+      });
+      document.querySelectorAll("[data-approve-meeting]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var res = Store.approveMeeting(project.id, btn.getAttribute("data-approve-meeting"), state.user.id);
+          if (!res.ok) {
+            UI.toast(res.message || "Unable to approve meeting.");
+            return;
+          }
+          UI.toast("Meeting approved.");
+          renderProjectView(project.id, "meetings");
+        });
+      });
       document.querySelectorAll("[data-view-meeting]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var meeting = Store.getMeetingById(btn.getAttribute("data-view-meeting"));
@@ -789,61 +922,110 @@
             return;
           }
           var aItems = Store.listActionItems(project.id).filter(function (a) { return a.meetingId === meeting.id; });
-          UI.openModal("Meeting Detail", '<p><strong>' + UI.escapeHtml(meeting.title) + '</strong> - ' + UI.formatDate(meeting.date) + '</p><p>' + UI.escapeHtml(meeting.summary) + '</p><p><strong>Decisions:</strong> ' + UI.escapeHtml(meeting.decisions) + '</p><h4>Action Items</h4><ul>' + aItems.map(function (a) {
-            var owner = byId(students, a.ownerId);
-            return '<li>' + UI.escapeHtml(a.description) + ' (' + UI.escapeHtml(owner ? owner.name : a.ownerId) + ')</li>';
+          UI.openModal("Meeting Detail", '<p><strong>' + UI.escapeHtml(meeting.title) + '</strong> - ' + UI.formatDate(meeting.date) + '</p><p>' + meetingStatusBadge(meeting.status) + '</p><p>' + UI.escapeHtml(meeting.summary) + '</p><p><strong>Decisions:</strong> ' + UI.escapeHtml(meeting.decisions) + '</p><h4>Action Items</h4><ul>' + aItems.map(function (a) {
+            var owner = byId(students, a.assigneeId || a.ownerId);
+            return '<li>' + UI.escapeHtml(a.description) + ' (' + UI.escapeHtml(owner ? owner.name : a.assigneeId || a.ownerId) + ") - " + UI.escapeHtml(a.priority) + '</li>';
           }).join("") + "</ul>", '');
         });
       });
     }
 
     if (currentTab === "action-items") {
-      tabBody.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr><th>Description</th><th>Owner</th><th>Due</th><th>Status</th><th>Priority</th><th>Meeting</th><th>Jira</th><th>Actions</th></tr></thead><tbody>' +
+      tabBody.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr><th>Description</th><th>Assignee</th><th>Due</th><th>Status</th><th>Priority</th><th>Meeting</th><th>Jira</th><th>Comment / Evidence</th><th>Actions</th></tr></thead><tbody>' +
       (actions.map(function (a) {
-        var owner = byId(students, a.ownerId);
+        var canEditAction = Store.canEditActionItem(state.user, a, project);
+        var lockFields = a.fieldsLocked;
+        var fieldDisabled = (!canEditAction || lockFields) ? "disabled" : "";
+        var statusDisabled = !canEditAction ? "disabled" : "";
         return '<tr>' +
           '<td>' + UI.escapeHtml(a.description) + '</td>' +
-          '<td>' + UI.escapeHtml(owner ? owner.name : a.ownerId) + '</td>' +
-          '<td>' + UI.formatDate(a.dueDate) + '</td>' +
-          '<td><select data-action-status="' + a.id + '"><option ' + (a.status === "Todo" ? "selected" : "") + '>Todo</option><option ' + (a.status === "In Progress" ? "selected" : "") + '>In Progress</option><option ' + (a.status === "Done" ? "selected" : "") + '>Done</option></select></td>' +
-          '<td>' + UI.escapeHtml(a.priority) + '</td>' +
+          '<td><select data-action-assignee="' + a.id + '" ' + fieldDisabled + '>' + students.filter(function (s) {
+            return project.studentIds.indexOf(s.id) > -1;
+          }).map(function (s) {
+            var selected = (s.id === (a.assigneeId || a.ownerId)) ? "selected" : "";
+            return '<option value="' + s.id + '" ' + selected + '>' + UI.escapeHtml(s.name) + '</option>';
+          }).join("") + "</select></td>" +
+          '<td><input data-action-due="' + a.id + '" type="date" value="' + UI.escapeHtml(a.dueDate) + '" ' + fieldDisabled + '/>' + (a.isOverdue ? ' <span class="badge behind">Overdue</span>' : "") + '</td>' +
+          '<td><select data-action-status="' + a.id + '" ' + statusDisabled + '><option ' + (a.status === "Todo" ? "selected" : "") + '>Todo</option><option ' + (a.status === "In Progress" ? "selected" : "") + '>In Progress</option><option ' + (a.status === "Done" ? "selected" : "") + '>Done</option></select></td>' +
+          '<td><select data-action-priority="' + a.id + '" ' + fieldDisabled + '><option value="LOW" ' + (a.priority === "LOW" ? "selected" : "") + '>LOW</option><option value="MEDIUM" ' + (a.priority === "MEDIUM" ? "selected" : "") + '>MEDIUM</option><option value="HIGH" ' + (a.priority === "HIGH" ? "selected" : "") + '>HIGH</option></select></td>' +
           '<td>' + UI.escapeHtml((meetings.find(function (m) { return m.id === a.meetingId; }) || {}).title || "-") + '</td>' +
           '<td>' + (a.jira ? '<a href="' + UI.escapeHtml(a.jira.url) + '" target="_blank">' + UI.escapeHtml(a.jira.key) + '</a>' : "-") + '</td>' +
+          '<td><textarea data-action-comment="' + a.id + '" rows="2" placeholder="Add comment"></textarea><input data-action-evidence="' + a.id + '" placeholder="Evidence link" value="' + UI.escapeHtml(a.evidenceLink || "") + '" /></td>' +
           '<td>' +
-          (canEdit ? '<button class="btn small" data-create-jira="' + a.id + '">Create Jira Task</button> <button class="btn small" data-link-jira="' + a.id + '">Link Existing Jira</button>' : "") +
+          (lockFields ? '<div class="notice">Locked fields</div>' : "") +
+          (canEditAction
+            ? (lockFields ? "" : '<button class="btn small" data-save-action="' + a.id + '">Save Fields</button> ') +
+              '<button class="btn small" data-update-action-status="' + a.id + '">Update Status</button> <button class="btn small" data-create-jira="' + a.id + '">Create Jira Task</button> <button class="btn small" data-link-jira="' + a.id + '">Link Jira</button>'
+            : '<span class="notice">Read-only</span>') +
           '</td>' +
           "</tr>";
-      }).join("") || '<tr><td colspan="8"><div class="empty">No action items yet.</div></td></tr>') +
+      }).join("") || '<tr><td colspan="9"><div class="empty">No action items yet.</div></td></tr>') +
       '</tbody></table></div>';
 
-      document.querySelectorAll("[data-action-status]").forEach(function (select) {
-        select.addEventListener("change", function () {
-          Store.updateActionItemStatus(select.getAttribute("data-action-status"), select.value);
-          UI.toast("Action item status updated");
+      document.querySelectorAll("[data-save-action]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var actionId = btn.getAttribute("data-save-action");
+          var assignee = document.querySelector('[data-action-assignee="' + actionId + '"]');
+          var due = document.querySelector('[data-action-due="' + actionId + '"]');
+          var priority = document.querySelector('[data-action-priority="' + actionId + '"]');
+          var comment = document.querySelector('[data-action-comment="' + actionId + '"]');
+          var evidence = document.querySelector('[data-action-evidence="' + actionId + '"]');
+          var res = Store.updateActionItem(actionId, {
+            assigneeId: assignee ? assignee.value : null,
+            dueDate: due ? due.value : null,
+            priority: priority ? priority.value : null,
+            comment: comment ? comment.value.trim() : "",
+            evidenceLink: evidence ? evidence.value.trim() : ""
+          }, state.user.id);
+          if (!res.ok) {
+            UI.toast(res.message || "Unable to update action item.");
+            return;
+          }
+          UI.toast("Action item updated.");
+          renderProjectView(projectId, "action-items");
         });
       });
 
-      if (canEdit) {
-        document.querySelectorAll("[data-create-jira]").forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            if (!project.jiraProjectKey) {
-              UI.toast("Jira not configured for this project. Add project key.");
-              return;
-            }
-            var updated = Store.createMockJiraForAction(btn.getAttribute("data-create-jira"), project.id);
-            if (updated) {
-              UI.toast("Jira task created: " + updated.jira.key);
-              renderProjectView(projectId, "action-items");
-            }
+      document.querySelectorAll("[data-update-action-status]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var actionId = btn.getAttribute("data-update-action-status");
+          var select = document.querySelector('[data-action-status="' + actionId + '"]');
+          var comment = document.querySelector('[data-action-comment="' + actionId + '"]');
+          var evidence = document.querySelector('[data-action-evidence="' + actionId + '"]');
+          var res = Store.updateActionItemStatus(actionId, select ? select.value : "Todo", state.user.id, {
+            comment: comment ? comment.value.trim() : "",
+            evidenceLink: evidence ? evidence.value.trim() : ""
           });
+          if (!res.ok) {
+            UI.toast(res.message || "Unable to update status.");
+            return;
+          }
+          UI.toast("Action item status updated.");
+          renderProjectView(projectId, "action-items");
         });
+      });
 
-        document.querySelectorAll("[data-link-jira]").forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            openLinkJiraModal(btn.getAttribute("data-link-jira"), projectId);
-          });
+      document.querySelectorAll("[data-create-jira]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          if (!project.jiraProjectKey) {
+            UI.toast("Jira not configured for this project. Add project key.");
+            return;
+          }
+          var updated = Store.createMockJiraForAction(btn.getAttribute("data-create-jira"), project.id, state.user.id);
+          if (updated.ok) {
+            UI.toast("Jira task created: " + updated.item.jira.key);
+            renderProjectView(projectId, "action-items");
+          } else {
+            UI.toast(updated.message || "Unable to create Jira issue.");
+          }
         });
-      }
+      });
+
+      document.querySelectorAll("[data-link-jira]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          openLinkJiraModal(btn.getAttribute("data-link-jira"), projectId);
+        });
+      });
     }
 
     if (currentTab === "files") {
@@ -891,11 +1073,16 @@
       "</div>";
     UI.openModal("Project Integrations", body, '<button class="btn" id="save-int">Save</button>');
     el("save-int").addEventListener("click", function () {
-      project.githubUrl = el("m-gh").value.trim();
-      project.jiraProjectKey = el("m-jira").value.trim().toUpperCase();
-      project.jiraBoardLink = el("m-jira-board").value.trim();
-      project.commsLink = el("m-comms").value.trim();
-      Store.upsertProject(project);
+      var result = Store.updateProjectIntegrations(project.id, {
+        githubUrl: el("m-gh").value.trim(),
+        jiraProjectKey: el("m-jira").value.trim().toUpperCase(),
+        jiraBoardLink: el("m-jira-board").value.trim(),
+        commsLink: el("m-comms").value.trim()
+      }, state.user.id);
+      if (!result.ok) {
+        UI.toast(result.message || "Unable to update integrations.");
+        return;
+      }
       UI.closeModal();
       UI.toast("Integrations updated");
       renderProjectView(project.id, "overview");
@@ -925,9 +1112,9 @@
       row.className = "action-row";
       row.innerHTML = '<div class="form-grid">' +
         '<div class="full"><label>Description</label><input data-a-desc="' + idx + '" /></div>' +
-        '<div><label>Owner</label><select data-a-owner="' + idx + '">' + students.map(function (s) { return '<option value="' + s.id + '">' + UI.escapeHtml(s.name) + '</option>'; }).join("") + '</select></div>' +
+        '<div><label>Assignee</label><select data-a-owner="' + idx + '">' + students.filter(function (s) { return project.studentIds.indexOf(s.id) > -1; }).map(function (s) { return '<option value="' + s.id + '">' + UI.escapeHtml(s.name) + '</option>'; }).join("") + '</select></div>' +
         '<div><label>Due Date</label><input data-a-due="' + idx + '" type="date" /></div>' +
-        '<div><label>Priority</label><select data-a-priority="' + idx + '"><option>High</option><option>Medium</option><option>Low</option></select></div>' +
+        '<div><label>Priority</label><select data-a-priority="' + idx + '"><option value="HIGH">HIGH</option><option value="MEDIUM" selected>MEDIUM</option><option value="LOW">LOW</option></select></div>' +
         '<div class="full"><label><input type="checkbox" data-a-jira="' + idx + '" ' + jiraDisabled + '/> Link to Jira now</label>' + hint + '</div>' +
         "</div>";
       el("action-list").appendChild(row);
@@ -964,16 +1151,31 @@
         }
         return {
           description: desc.value.trim(),
-          ownerId: owner ? owner.value : project.studentIds[0],
-          dueDate: due && due.value ? due.value : new Date().toISOString().slice(0, 10),
-          priority: pri ? pri.value : "Medium",
+          assigneeId: owner ? owner.value : project.studentIds[0],
+          dueDate: due && due.value ? due.value : "",
+          priority: pri ? pri.value : "MEDIUM",
           jira: jira
         };
       }).filter(Boolean);
 
-      Store.addMeeting(project.id, { title: title, date: date, summary: summary, decisions: decisions }, actionItems);
+      if (actionItems.some(function (item) { return !item.dueDate; })) {
+        UI.toast("Each action item requires a due date.");
+        return;
+      }
+
+      var result = Store.createMeeting(project.id, {
+        title: title,
+        date: date,
+        summary: summary,
+        decisions: decisions,
+        actionItems: actionItems
+      }, state.user.id);
+      if (!result.ok) {
+        UI.toast(result.message || "Unable to save meeting.");
+        return;
+      }
       UI.closeModal();
-      UI.toast("Meeting minutes saved");
+      UI.toast("Meeting saved as draft");
       renderProjectView(project.id, "meetings");
     });
   }
@@ -987,7 +1189,11 @@
         UI.toast("Please enter issue key and URL");
         return;
       }
-      Store.linkActionItemJira(actionId, { key: key, url: url });
+      var result = Store.linkActionItemJira(actionId, { key: key, url: url }, state.user.id);
+      if (!result.ok) {
+        UI.toast(result.message || "Unable to link Jira issue.");
+        return;
+      }
       UI.closeModal();
       UI.toast("Jira link saved");
       renderProjectView(projectId, "action-items");
@@ -1015,11 +1221,11 @@
       title("Student Home") +
       '<div class="split"><div class="card"><h3 style="margin:0 0 10px">Assigned Projects</h3>' +
       (projects.map(function (p) {
-        return '<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0"><div><strong>' + UI.escapeHtml(p.title) + '</strong><div class="meta">Milestone: ' + UI.formatDate(p.milestoneDate) + '</div></div><button class="btn small" data-open-project="' + p.id + '">Open</button></div>';
+        return '<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0"><div><strong>' + UI.escapeHtml(p.title) + '</strong><div class="meta">Milestone: ' + UI.formatDate(p.milestoneDate) + " • " + UI.escapeHtml(milestoneDeltaText(p.milestoneDate)) + '</div><div>' + lifecycleBadge(p.lifecycleStatus) + '</div></div><button class="btn small" data-open-project="' + p.id + '">Open</button></div>';
       }).join("") || '<div class="empty">No assigned projects.</div>') +
       '</div><div class="card"><h3 style="margin:0 0 10px">My Action Items Due Soon</h3>' +
       (soon.map(function (a) {
-        return '<div style="border-bottom:1px solid var(--border);padding:8px 0"><strong>' + UI.escapeHtml(a.description) + '</strong><div class="meta">Due ' + UI.formatDate(a.dueDate) + ' | ' + UI.escapeHtml(a.status) + '</div></div>';
+        return '<div style="border-bottom:1px solid var(--border);padding:8px 0"><strong>' + UI.escapeHtml(a.description) + '</strong><div class="meta">Due ' + UI.formatDate(a.dueDate) + ' | ' + UI.escapeHtml(a.status) + (a.isOverdue ? " | Overdue" : "") + '</div></div>';
       }).join("") || '<div class="empty">No upcoming due items.</div>') +
       '</div></div>' +
       '<div class="card" style="margin-top:14px"><h3 style="margin:0 0 10px">Recent Meetings</h3><div class="table-wrap"><table class="table"><thead><tr><th>Project</th><th>Title</th><th>Date</th></tr></thead><tbody>' +
