@@ -223,6 +223,30 @@ textarea:focus {
   font-weight: 600;
 }
 
+.dashboard-head {
+  margin-bottom: 14px;
+  border-left: 4px solid var(--primary);
+}
+
+.dashboard-kpis .kpi-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-kpis .kpi-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), #66a9e8);
+}
+
+.dashboard-note {
+  background: #fbfdff;
+}
+
 .table-wrap {
   overflow: auto;
 }
@@ -253,6 +277,27 @@ textarea:focus {
 
 .table tbody tr:hover {
   background: #f8fbff;
+}
+
+.project-health-card .table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.project-health-card .table-wrap {
+  max-height: 520px;
+}
+
+.project-health-card .quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.integration-note {
+  display: inline-block;
+  padding: 4px 2px;
 }
 
 .action-items-table th,
@@ -392,6 +437,19 @@ textarea:focus {
 .project-card h3 {
   margin: 0 0 8px;
   font-size: 17px;
+}
+
+.project-card-link {
+  cursor: pointer;
+}
+
+.project-card-link:hover {
+  border-color: #b9c8da;
+}
+
+.project-card-link:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(15, 108, 191, 0.2);
 }
 
 .meta {

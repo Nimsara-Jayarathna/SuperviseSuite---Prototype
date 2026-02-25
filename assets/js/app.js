@@ -537,6 +537,7 @@
     var users = Store.listStudents();
 
     Store.simulate({ projects: projects, stats: Store.statsForDashboard(projects) }).then(function (payload) {
+      var visibleProjects = payload.projects.filter(function (p) { return projectMatchesSearch(p, users); });
       var rows = payload.projects.filter(function (p) { return projectMatchesSearch(p, users); }).map(function (p) {
         var summary = Store.getProjectSummary(p.id) || { openActionItems: 0, overdueCount: 0, meetingCount: 0 };
         var hasIntegrationIssues = p.githubIntegration.status !== "CONNECTED" || p.jiraIntegration.status !== "CONNECTED" || p.commsIntegration.status !== "CONNECTED";
@@ -547,14 +548,14 @@
           '<td>' + summary.openActionItems + '</td>' +
           '<td>' + summary.overdueCount + '</td>' +
           '<td>' + UI.formatDate(p.milestoneDate) + '<div class="meta">' + milestoneDeltaText(p.milestoneDate) + '</div></td>' +
-          '<td><button class="btn small" data-open-project="' + p.id + '">Open</button> <button class="btn small" data-open-tab="meetings" data-open-project="' + p.id + '">Meetings</button> <button class="btn small" data-open-tab="files" data-open-project="' + p.id + '">Files</button></td>' +
+          '<td><div class="quick-actions"><button class="btn small" data-open-project="' + p.id + '">Open</button> <button class="btn small" data-open-tab="meetings" data-open-project="' + p.id + '">Meetings</button> <button class="btn small" data-open-tab="files" data-open-project="' + p.id + '">Files</button></div></td>' +
           "</tr>" +
-          (hasIntegrationIssues ? '<tr><td colspan="7"><div class="notice">One or more integrations are not fully connected.</div></td></tr>' : "");
+          (hasIntegrationIssues ? '<tr><td colspan="7"><div class="notice integration-note">One or more integrations are not fully connected.</div></td></tr>' : "");
       }).join("");
 
       renderLayout(
-        title("Supervisor Dashboard") +
-        '<div class="grid cards-5" style="margin-bottom:14px">' +
+        '<div class="dashboard-head card"><div class="row wrap" style="justify-content:space-between;align-items:flex-start"><div><h1 class="page-title" style="margin-bottom:8px">Supervisor Dashboard</h1><div class="meta">Portfolio overview, delivery health, and intervention-ready actions.</div></div><div class="row wrap"><span class="badge on-track">Visible projects: ' + visibleProjects.length + '</span><span class="badge at-risk">Overdue: ' + payload.stats.overdue + '</span></div></div></div>' +
+        '<div class="grid cards-5 dashboard-kpis" style="margin-bottom:14px">' +
           metricCard("Total Projects", payload.stats.total) +
           metricCard("On Track", payload.stats.onTrack) +
           metricCard("At Risk", payload.stats.atRisk) +
@@ -563,9 +564,9 @@
         "</div>" +
         '<div class="grid cards-4" style="margin-bottom:14px">' +
           metricCard("Active Students This Week", payload.stats.activeStudents) +
-          '<div class="card" style="grid-column: span 3"><div class="metric-label">Lifecycle Model</div><div class="meta">KPIs map ACTIVE to On Track, AT_RISK to At Risk, and BEHIND to Behind.</div></div>' +
+          '<div class="card dashboard-note" style="grid-column: span 3"><div class="metric-label">Lifecycle Model</div><div class="meta">KPIs map ACTIVE to On Track, AT_RISK to At Risk, and BEHIND to Behind.</div></div>' +
         "</div>" +
-        '<div class="card" style="margin-bottom:14px"><h3 style="margin:0 0 8px">Project Health Table</h3><div class="table-wrap"><table class="table"><thead><tr><th>Project</th><th>Status</th><th>Last Activity</th><th>Open Actions</th><th>Overdue</th><th>Next Milestone</th><th>Quick Actions</th></tr></thead><tbody>' +
+        '<div class="card project-health-card" style="margin-bottom:14px"><div class="row wrap" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Project Health Table</h3><div class="meta">Showing ' + visibleProjects.length + " of " + payload.projects.length + ' projects</div></div><div class="table-wrap"><table class="table"><thead><tr><th>Project</th><th>Status</th><th>Last Activity</th><th>Open Actions</th><th>Overdue</th><th>Next Milestone</th><th>Quick Actions</th></tr></thead><tbody>' +
         (rows || '<tr><td colspan="7"><div class="empty">No projects match current search.</div></td></tr>') +
         "</tbody></table></div></div>" +
         '<div class="split"><div class="card"><h3 style="margin:0 0 10px">Activity Over Time (6 weeks)</h3><canvas id="activity-line" width="620" height="220"></canvas></div><div class="card"><h3 style="margin:0 0 10px">Commits by Project</h3><canvas id="activity-bars" width="310" height="220"></canvas></div></div>'
@@ -588,7 +589,7 @@
   }
 
   function metricCard(label, value) {
-    return '<div class="card"><div class="metric-label">' + UI.escapeHtml(label) + '</div><div class="metric-value">' + value + "</div></div>";
+    return '<div class="card kpi-card"><div class="metric-label">' + UI.escapeHtml(label) + '</div><div class="metric-value">' + value + "</div></div>";
   }
 
   function bindOpenProjectButtons() {
