@@ -29,7 +29,7 @@
   }
 
   function roleHome(role) {
-    return role === "SUPERVISOR" ? "#/dashboard" : "#/student";
+    return role === "SUPERVISOR" ? "/dashboard" : "/student";
   }
 
   function badgeClassForLifecycle(status) {
@@ -144,9 +144,9 @@
   }
 
   function rememberReturnTo(rawRoute) {
-    var target = rawRoute || location.hash || "#/";
-    if (!target.startsWith("#/")) {
-      target = "#/";
+    var target = rawRoute || location.pathname || "/";
+    if (!target.startsWith("/")) {
+      target = "/";
     }
     var session = Store.getSession() || {};
     session.returnTo = target;
@@ -177,12 +177,12 @@
 
     var items = state.user.role === "SUPERVISOR"
       ? [
-        { key: "dashboard", label: "Dashboard", hash: "#/dashboard" },
-        { key: "projects", label: "Projects", hash: "#/projects" }
+        { key: "dashboard", label: "Dashboard", path: "/dashboard" },
+        { key: "projects", label: "Projects", path: "/projects" }
       ]
       : [
-        { key: "student", label: "Student Home", hash: "#/student" },
-        { key: "projects", label: "My Projects", hash: "#/projects" }
+        { key: "student", label: "Student Home", path: "/student" },
+        { key: "projects", label: "My Projects", path: "/projects" }
       ];
 
     var activePath = state.route ? state.route.path : "";
@@ -190,7 +190,7 @@
     return '<div class="brand">SuperviseSuite</div><div class="nav-group">' +
       items.map(function (item) {
         var isActive = activePath.indexOf(item.key) !== -1 || (activePath === "/projects/:id" && item.key === "projects");
-        return '<button class="nav-item ' + (isActive ? "active" : "") + '" data-nav="' + item.hash + '">' + UI.escapeHtml(item.label) + "</button>";
+        return '<button class="nav-item ' + (isActive ? "active" : "") + '" data-nav="' + item.path + '">' + UI.escapeHtml(item.label) + "</button>";
       }).join("") +
       "</div>";
   }
@@ -212,13 +212,13 @@
       Store.clearSession();
       state.user = null;
       UI.toast("Session expired");
-      Router.go("#/login");
+      Router.go("/login");
       return false;
     }
 
     if (!ss.authenticated && !isPublicRoute(route.path)) {
       rememberReturnTo(route.raw);
-      Router.go("#/login");
+      Router.go("/login");
       return false;
     }
 
@@ -230,7 +230,7 @@
     state.user = Store.getCurrentUser();
     if (!state.user) {
       Store.clearSession();
-      Router.go("#/login");
+      Router.go("/login");
       return false;
     }
 
@@ -242,19 +242,19 @@
     }
 
     if (state.user.role === "STUDENT" && supervisorOnly.indexOf(route.path) > -1) {
-      Router.go("#/student");
+      Router.go("/student");
       return false;
     }
 
     if (state.user.role === "SUPERVISOR" && route.path === "/student") {
-      Router.go("#/dashboard");
+      Router.go("/dashboard");
       return false;
     }
 
     if (route.path === "/projects/:id" && state.user.role === "STUDENT") {
       var project = Store.getProjectById(route.params.id);
       if (!project || project.studentIds.indexOf(state.user.id) === -1) {
-        Router.go("#/student");
+        Router.go("/student");
         return false;
       }
     }
@@ -277,7 +277,7 @@
         state.user = null;
         closeSidebar();
         UI.toast("Logged out");
-        Router.go("#/");
+        Router.go("/");
       });
     }
 
@@ -359,13 +359,13 @@
     );
 
     el("landing-login").addEventListener("click", function () {
-      Router.go("#/login");
+      Router.go("/login");
     });
     el("landing-register").addEventListener("click", function () {
-      Router.go("#/register");
+      Router.go("/register");
     });
     el("landing-ba").addEventListener("click", function () {
-      Router.go("#/BAchecklist");
+      Router.go("/BAchecklist/");
     });
 
     document.querySelectorAll("[data-demo-login]").forEach(function (btn) {
@@ -395,7 +395,7 @@
       '<div class="full"><label>Email</label><input id="login-email" value="supervisor@demo.com"/></div>' +
       '<div class="full"><label>Password</label><input id="login-password" type="password" value="demo123"/></div>' +
       "</div>" +
-      '<div class="row" style="justify-content:space-between;margin-top:10px"><a href="#/register" class="btn ghost">Create account</a><button class="btn primary" id="login-submit">Login</button></div>' +
+      '<div class="row" style="justify-content:space-between;margin-top:10px"><a href="/register" class="btn ghost">Create account</a><button class="btn primary" id="login-submit">Login</button></div>' +
       '<p class="notice">All seeded demo accounts use password: <strong>demo123</strong></p>' +
       "</div>"
     );
@@ -434,7 +434,7 @@
       '<div><label>Confirm Password</label><input id="reg-confirm" type="password"/><div class="field-error" id="reg-confirm-err"></div></div>' +
       '<div class="full"><label>Role</label><select id="reg-role"><option value="STUDENT">Student</option></select></div>' +
       '</div>' +
-      '<div class="row" style="justify-content:space-between;margin-top:12px"><a href="#/login" class="btn ghost">Back to login</a><button class="btn primary" id="reg-submit">Register</button></div>' +
+      '<div class="row" style="justify-content:space-between;margin-top:12px"><a href="/login" class="btn ghost">Back to login</a><button class="btn primary" id="reg-submit">Register</button></div>' +
       '</div>'
     );
 
@@ -519,7 +519,7 @@
 
         var target = loginWithCredentials(payload.email, payload.password);
         UI.toast("Registration successful");
-        Router.go(target || "#/student");
+        Router.go(target || "/student");
       });
     });
   }
@@ -658,7 +658,7 @@
       var openProject = function () {
         var id = node.getAttribute("data-open-project");
         var tab = node.getAttribute("data-open-tab");
-        var target = "#/projects/" + id;
+        var target = "/projects/" + id;
         if (tab) {
           target += "?tab=" + tab;
         }
@@ -735,7 +735,7 @@
     var np = el("new-project-btn");
     if (np) {
       np.addEventListener("click", function () {
-        Router.go("#/projects/new");
+        Router.go("/projects/new");
       });
     }
 
@@ -762,7 +762,11 @@
     }
 
     function screen() {
-      var html = title("Create New Project") + '<div class="card wizard-shell">';
+      var html = title("Create New Project") +
+        '<div class="row wrap" style="justify-content:space-between;align-items:center;margin-bottom:10px">' +
+        '<div class="meta">Need requirement confirmation before setup? Open the BA checklist.</div>' +
+        '<button class="btn small ghost" id="wizard-ba-checklist">BA Checklist</button>' +
+        '</div><div class="card wizard-shell">';
       html += '<div class="wizard-steps"><span class="wizard-step ' + (step === 1 ? "active" : "") + '">Step 1: Basic Info</span><span class="wizard-step ' + (step === 2 ? "active" : "") + '">Step 2: Connections</span></div>';
       if (step === 1) {
         html += '<div class="wizard-section"><h3>Project Basics</h3><div class="meta">Capture the core identity and delivery timeline.</div><div class="form-grid">' +
@@ -823,7 +827,7 @@
           }
           var created = Store.createProject(data, state.user.id);
           UI.toast("Project created");
-          Router.go("#/projects/" + created.id);
+          Router.go("/projects/" + created.id);
         }
       });
 
@@ -848,6 +852,13 @@
           data.jiraBoardLink = el("w-jira-board").value.trim();
           step = 1;
           screen();
+        });
+      }
+
+      var checklistBtn = el("wizard-ba-checklist");
+      if (checklistBtn) {
+        checklistBtn.addEventListener("click", function () {
+          Router.go("/BAchecklist/");
         });
       }
     }
@@ -890,7 +901,7 @@
     renderLayout(html);
     document.querySelectorAll("[data-tab]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        Router.go("#/projects/" + projectId + "?tab=" + btn.getAttribute("data-tab"));
+        Router.go("/projects/" + projectId + "?tab=" + btn.getAttribute("data-tab"));
       });
     });
 
@@ -1336,8 +1347,7 @@
       query: "",
       module: "",
       priority: "",
-      statusFilters: ["OPEN", "DISCUSSING", "DECIDED", "DEFERRED"],
-      expandedItemId: null
+      statusFilters: ["OPEN", "DISCUSSING", "DECIDED", "DEFERRED"]
     };
 
     function groupedCounts(items, module) {
@@ -1364,7 +1374,7 @@
       var lastBy = item.updatedByUserId ? Store.getUserById(item.updatedByUserId) : null;
       var readOnly = !isSupervisor;
       var altList = item.alternatives.length ? "<ul>" + item.alternatives.map(function (a) { return "<li>" + UI.escapeHtml(a) + "</li>"; }).join("") + "</ul>" : '<div class="meta">No alternatives listed.</div>';
-      return '<div class="finalize-detail">' +
+      return '<div class="finalize-detail finalize-modal-detail">' +
         '<div class="finalize-detail-grid">' +
         '<div><h4>Business intent</h4><p>' + UI.escapeHtml(item.businessIntent || "-") + '</p></div>' +
         '<div><h4>Current implementation</h4><p>' + UI.escapeHtml(item.currentImplementation || "-") + '</p></div>' +
@@ -1379,10 +1389,133 @@
         '<div><label>Owner</label><select data-fin-owner="' + item.id + '" ' + (readOnly ? "disabled" : "") + '><option ' + (item.owner === "CLIENT" ? "selected" : "") + '>CLIENT</option><option ' + (item.owner === "TEAM" ? "selected" : "") + '>TEAM</option></select></div>' +
         '<div class="full"><label>Client decision</label><textarea rows="3" data-fin-decision="' + item.id + '" ' + (readOnly ? "readonly" : "") + ' placeholder="Document the agreed decision...">' + UI.escapeHtml(item.clientDecision || "") + "</textarea></div>" +
         '</div>' +
-        (readOnly ? '<div class="notice">Read-only for student role.</div>' : '<div class="row wrap"><button class="btn small" data-fin-save="' + item.id + '">Save</button><button class="btn small primary" data-fin-decide="' + item.id + '">Mark Decided</button><button class="btn small ghost" data-fin-delete="' + item.id + '">Delete</button></div>') +
+        (readOnly ? '<div class="notice">Read-only for student role.</div>' : "") +
         '</div>' +
         '<div class="meta finalize-meta">Last updated: ' + UI.formatDateTime(item.updatedAt) + (lastBy ? " by " + UI.escapeHtml(lastBy.name) : "") + "</div>" +
         '</div>';
+    }
+
+    function statusTone(status) {
+      if (status === "DECIDED") {
+        return "on-track";
+      }
+      if (status === "DEFERRED") {
+        return "behind";
+      }
+      return "at-risk";
+    }
+
+    function attentionMeta(item) {
+      if (item.status === "OPEN" && (item.priority === "MUST" || item.impact === "HIGH")) {
+        return { label: "Needs decision", tone: "behind" };
+      }
+      if (item.status === "DISCUSSING" && item.impact === "HIGH") {
+        return { label: "High-impact pending", tone: "at-risk" };
+      }
+      if (item.status === "DEFERRED") {
+        return { label: "Deferred follow-up", tone: "behind" };
+      }
+      return { label: "Tracked", tone: "info" };
+    }
+
+    function openFinalizeItemModal(itemId) {
+      var item = Store.getFinalizeItems().find(function (x) { return x.id === itemId; });
+      if (!item) {
+        UI.toast("Item not found.");
+        return;
+      }
+
+      var readOnly = !isSupervisor;
+      var footer = readOnly
+        ? ""
+        : '<button class="btn small ghost" id="fin-modal-delete">Delete</button><button class="btn small" id="fin-modal-save">Save</button><button class="btn small primary" id="fin-modal-decide">Mark Decided</button>';
+
+      UI.openModal("Checklist Detail", renderItemDetail(item), footer);
+
+      var escHandler = function (event) {
+        if (event.key === "Escape") {
+          document.removeEventListener("keydown", escHandler);
+          UI.closeModal();
+        }
+      };
+      document.addEventListener("keydown", escHandler);
+
+      var closeBtn = el("modal-x");
+      if (closeBtn) {
+        closeBtn.addEventListener("click", function () {
+          document.removeEventListener("keydown", escHandler);
+        });
+      }
+      var closeTarget = el("modal-close-target");
+      if (closeTarget) {
+        closeTarget.addEventListener("click", function (event) {
+          if (event.target.id === "modal-close-target") {
+            document.removeEventListener("keydown", escHandler);
+          }
+        });
+      }
+
+      if (!readOnly) {
+        var saveBtn = el("fin-modal-save");
+        if (saveBtn) {
+          saveBtn.addEventListener("click", function () {
+            var statusSel = document.querySelector('[data-fin-status="' + item.id + '"]');
+            var priSel = document.querySelector('[data-fin-priority="' + item.id + '"]');
+            var impactSel = document.querySelector('[data-fin-impact="' + item.id + '"]');
+            var ownerSel = document.querySelector('[data-fin-owner="' + item.id + '"]');
+            var decision = document.querySelector('[data-fin-decision="' + item.id + '"]');
+            var result = Store.updateFinalizeItem(item.id, {
+              status: statusSel ? statusSel.value : undefined,
+              priority: priSel ? priSel.value : undefined,
+              impact: impactSel ? impactSel.value : undefined,
+              owner: ownerSel ? ownerSel.value : undefined,
+              clientDecision: decision ? decision.value.trim() : ""
+            }, state.user);
+            if (!result.ok) {
+              UI.toast(result.message || "Unable to save item.");
+              return;
+            }
+            document.removeEventListener("keydown", escHandler);
+            UI.closeModal();
+            UI.toast("Finalize item updated.");
+            renderPage();
+          });
+        }
+
+        var decideBtn = el("fin-modal-decide");
+        if (decideBtn) {
+          decideBtn.addEventListener("click", function () {
+            var decision = document.querySelector('[data-fin-decision="' + item.id + '"]');
+            var result = Store.updateFinalizeItem(item.id, {
+              status: "DECIDED",
+              clientDecision: decision ? decision.value.trim() : ""
+            }, state.user);
+            if (!result.ok) {
+              UI.toast(result.message || "Unable to mark decided.");
+              return;
+            }
+            document.removeEventListener("keydown", escHandler);
+            UI.closeModal();
+            UI.toast("Marked as DECIDED.");
+            renderPage();
+          });
+        }
+
+        var delBtn = el("fin-modal-delete");
+        if (delBtn) {
+          delBtn.addEventListener("click", function () {
+            var res = Store.deleteFinalizeItem(item.id, state.user);
+            if (!res.ok) {
+              UI.toast(res.message || "Unable to delete item.");
+              return;
+            }
+            document.removeEventListener("keydown", escHandler);
+            UI.closeModal();
+            UI.toast("Finalize item deleted.");
+            renderPage();
+          });
+        }
+      }
     }
 
     function buildExport(format, filtered) {
@@ -1446,18 +1579,19 @@
         var c = groupedCounts(filtered, module);
         return '<details class="finalize-group" open><summary><span class="finalize-group-title">' + module.replace(/_/g, " ") + '</span><span class="finalize-group-counts"><span class="badge info">Open ' + c.open + '</span><span class="badge at-risk">Discussing ' + c.discussing + '</span><span class="badge on-track">Decided ' + c.decided + '</span><span class="badge behind">Deferred ' + c.deferred + "</span></span></summary><div class=\"finalize-cards\">" +
           rows.map(function (item) {
-            var expanded = viewState.expandedItemId === item.id;
-            return '<article class="finalize-card ' + (expanded ? "expanded" : "") + '" data-fin-open="' + item.id + '" tabindex="0">' +
-              '<div class="row wrap" style="justify-content:space-between"><h4>' + UI.escapeHtml(item.title) + '</h4><div class="row wrap"><span class="badge ' + (item.status === "DECIDED" ? "on-track" : (item.status === "DEFERRED" ? "behind" : "at-risk")) + '">' + item.status + '</span><span class="badge info">' + item.priority + "/" + item.impact + '</span></div></div>' +
+            var tone = statusTone(item.status);
+            var attention = attentionMeta(item);
+            return '<article class="finalize-card tone-' + tone + '" data-fin-open="' + item.id + '" tabindex="0">' +
+              '<div class="row wrap" style="justify-content:space-between"><h4>' + UI.escapeHtml(item.title) + '</h4><div class="row wrap"><span class="badge ' + tone + '">' + item.status + '</span><span class="badge info">' + item.priority + "/" + item.impact + '</span><span class="badge ' + attention.tone + '">' + attention.label + "</span></div></div>" +
               '<p class="meta finalize-preview">' + UI.escapeHtml(item.currentImplementation || item.businessIntent || "No summary available.") + '</p>' +
-              (expanded ? renderItemDetail(item) : "") +
+              '<div class="row wrap finalize-card-footer"><span class="meta">Owner: ' + UI.escapeHtml(item.owner) + '</span><button class="btn small ghost" type="button">Review</button></div>' +
               '</article>';
           }).join("") + "</div></details>";
       }).join("");
 
       renderLayout(
         '<section class="finalize-shell">' +
-        '<div class="finalize-header card"><div><h1 class="page-title" style="margin-bottom:8px">BA Checklist</h1><p class="meta">Client clarifications to confirm before locking scope</p></div><div class="row wrap finalize-header-actions"><a class="btn small ghost" href="#/">Home</a><select id="fin-export-format" class="finalize-select"><option value="json">Export JSON</option><option value="text">Export Text</option></select><button class="btn small" id="fin-export-btn">Export</button><button class="btn small" id="fin-copy-btn">Copy</button>' + (isSupervisor ? '<button class="btn small primary" id="fin-add-btn">Add Item</button>' : "") + '</div></div>' +
+        '<div class="finalize-header card"><div><h1 class="page-title" style="margin-bottom:8px">BA Checklist</h1><p class="meta">Client clarifications to confirm before locking scope</p></div><div class="row wrap finalize-header-actions"><a class="btn small ghost" href="/">Home</a><select id="fin-export-format" class="finalize-select"><option value="json">Export JSON</option><option value="text">Export Text</option></select><button class="btn small" id="fin-export-btn">Export</button><button class="btn small" id="fin-copy-btn">Copy</button>' + (isSupervisor ? '<button class="btn small primary" id="fin-add-btn">Add Item</button>' : "") + '</div></div>' +
         '<div class="finalize-stats row wrap">' +
         '<span class="badge info">Total ' + stats.total + '</span>' +
         '<span class="badge at-risk">Open ' + stats.openCount + '</span>' +
@@ -1504,7 +1638,6 @@
           viewState.module = "";
           viewState.priority = "";
           viewState.statusFilters = statuses.slice();
-          viewState.expandedItemId = null;
           renderPage();
         });
       }
@@ -1537,8 +1670,7 @@
       document.querySelectorAll("[data-fin-open]").forEach(function (card) {
         var open = function () {
           var id = card.getAttribute("data-fin-open");
-          viewState.expandedItemId = viewState.expandedItemId === id ? null : id;
-          renderPage();
+          openFinalizeItemModal(id);
         };
         card.addEventListener("click", function (event) {
           if (event.target.closest("textarea,select,input,button,a")) {
@@ -1555,61 +1687,6 @@
       });
 
       if (isSupervisor) {
-        document.querySelectorAll("[data-fin-save]").forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            var id = btn.getAttribute("data-fin-save");
-            var statusSel = document.querySelector('[data-fin-status="' + id + '"]');
-            var priSel = document.querySelector('[data-fin-priority="' + id + '"]');
-            var impactSel = document.querySelector('[data-fin-impact="' + id + '"]');
-            var ownerSel = document.querySelector('[data-fin-owner="' + id + '"]');
-            var decision = document.querySelector('[data-fin-decision="' + id + '"]');
-            var result = Store.updateFinalizeItem(id, {
-              status: statusSel ? statusSel.value : undefined,
-              priority: priSel ? priSel.value : undefined,
-              impact: impactSel ? impactSel.value : undefined,
-              owner: ownerSel ? ownerSel.value : undefined,
-              clientDecision: decision ? decision.value.trim() : ""
-            }, state.user);
-            if (!result.ok) {
-              UI.toast(result.message || "Unable to save item.");
-              return;
-            }
-            UI.toast("Finalize item updated.");
-            renderPage();
-          });
-        });
-
-        document.querySelectorAll("[data-fin-decide]").forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            var id = btn.getAttribute("data-fin-decide");
-            var decision = document.querySelector('[data-fin-decision="' + id + '"]');
-            var result = Store.updateFinalizeItem(id, {
-              status: "DECIDED",
-              clientDecision: decision ? decision.value.trim() : ""
-            }, state.user);
-            if (!result.ok) {
-              UI.toast(result.message || "Unable to mark decided.");
-              return;
-            }
-            UI.toast("Marked as DECIDED.");
-            renderPage();
-          });
-        });
-
-        document.querySelectorAll("[data-fin-delete]").forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            var id = btn.getAttribute("data-fin-delete");
-            var res = Store.deleteFinalizeItem(id, state.user);
-            if (!res.ok) {
-              UI.toast(res.message || "Unable to delete item.");
-              return;
-            }
-            UI.toast("Finalize item deleted.");
-            viewState.expandedItemId = null;
-            renderPage();
-          });
-        });
-
         var addBtn = el("fin-add-btn");
         if (addBtn) {
           addBtn.addEventListener("click", openAddModal);
@@ -1623,7 +1700,6 @@
               return;
             }
             UI.toast("Finalize defaults restored.");
-            viewState.expandedItemId = null;
             renderPage();
           });
         }
@@ -1711,7 +1787,7 @@
     }
 
     if (state.route.path === "/finalize") {
-      Router.go("#/BAchecklist");
+      Router.go("/BAchecklist/");
       return;
     }
 
@@ -1720,7 +1796,7 @@
       return;
     }
 
-    Router.go(state.user && state.user.role === "STUDENT" ? "#/student" : "#/");
+    Router.go(state.user && state.user.role === "STUDENT" ? "/student" : "/");
   }
 
   function boot() {

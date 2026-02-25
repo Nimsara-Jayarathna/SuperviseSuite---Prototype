@@ -1,19 +1,24 @@
 (function () {
   var listeners = [];
 
-  function normalizeHash() {
-    var hash = location.hash || "#/";
-    if (!hash.startsWith("#/")) {
-      return "#/";
+  function normalizePath(path) {
+    var clean = String(path || "/").trim();
+    if (!clean) {
+      return "/";
     }
-    return hash;
+    if (clean.startsWith("#/")) {
+      clean = clean.slice(1);
+    }
+    if (!clean.startsWith("/")) {
+      clean = "/" + clean;
+    }
+    return clean;
   }
 
-  function parseRoute() {
-    var hash = normalizeHash();
-    var clean = hash.slice(2);
-    var segments = clean.split("?")[0].split("/").filter(Boolean);
-    var queryString = hash.split("?")[1] || "";
+  function parseRouteFrom(pathAndQuery) {
+    var cleanPath = normalizePath((pathAndQuery || "/").split("?")[0]);
+    var segments = cleanPath.split("/").filter(Boolean);
+    var queryString = (pathAndQuery || "").split("?")[1] || "";
     var query = {};
 
     if (queryString) {
@@ -23,18 +28,25 @@
       });
     }
 
-    var route = { raw: hash, path: "/" + segments.join("/"), segments: segments, params: {}, query: query };
+    var route = { raw: cleanPath + (queryString ? "?" + queryString : ""), path: "/" + segments.join("/"), segments: segments, params: {}, query: query };
 
     if (segments[0] === "projects" && segments[1] && segments[1] !== "new") {
       route.path = "/projects/:id";
       route.params.id = segments[1];
     }
 
-    if (clean === "") {
+    if (cleanPath === "/") {
       route.path = "/";
     }
 
     return route;
+  }
+
+  function parseRoute() {
+    if (location.hash && location.hash.startsWith("#/")) {
+      return parseRouteFrom(location.hash.slice(1));
+    }
+    return parseRouteFrom(location.pathname + location.search);
   }
 
   function onChange(handler) {
@@ -48,15 +60,39 @@
     });
   }
 
-  function go(hashPath) {
-    location.hash = hashPath;
+  function go(path) {
+    var normalized = normalizePath(path || "/");
+    if (location.pathname + location.search !== normalized) {
+      history.pushState({}, "", normalized);
+    }
+    notify();
   }
 
   function start() {
-    window.addEventListener("hashchange", notify);
+    window.addEventListener("popstate", notify);
+    document.addEventListener("click", function (event) {
+      var anchor = event.target.closest("a[href]");
+      if (!anchor) {
+        return;
+      }
+      if (anchor.target && anchor.target !== "_self") {
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      var href = anchor.getAttribute("href");
+      if (!href || href.indexOf("http") === 0 || href.indexOf("mailto:") === 0 || href.indexOf("tel:") === 0) {
+        return;
+      }
+      if (href.startsWith("/")) {
+        event.preventDefault();
+        go(href);
+      }
+    });
     window.addEventListener("load", function () {
-      if (!location.hash) {
-        location.hash = "#/";
+      if (location.hash && location.hash.startsWith("#/")) {
+        history.replaceState({}, "", normalizePath(location.hash.slice(1)));
       }
       notify();
     });

@@ -806,16 +806,19 @@ textarea:focus {
   background: #fbfcfe;
   padding: 10px;
   cursor: pointer;
+  border-left-width: 4px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.12s ease;
 }
 
 .finalize-card:hover {
   border-color: #bfd0e4;
   background: #f7fbff;
+  transform: translateY(-1px);
 }
 
-.finalize-card.expanded {
-  border-color: #99bce2;
-  background: #fff;
+.finalize-card:focus-visible {
+  outline: 2px solid #1f6db5;
+  outline-offset: 1px;
 }
 
 .finalize-card h4 {
@@ -825,12 +828,40 @@ textarea:focus {
 
 .finalize-preview {
   margin: 6px 0 0;
+  max-width: 92ch;
+}
+
+.finalize-card-footer {
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.finalize-card.tone-at-risk {
+  border-left-color: #c78b17;
+}
+
+.finalize-card.tone-on-track {
+  border-left-color: #2f7a49;
+}
+
+.finalize-card.tone-behind {
+  border-left-color: #cc4040;
+}
+
+.finalize-card.tone-info {
+  border-left-color: #4e7cae;
 }
 
 .finalize-detail {
   margin-top: 10px;
   border-top: 1px dashed #d5dde6;
   padding-top: 10px;
+}
+
+.finalize-modal-detail {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
 }
 
 .finalize-detail-grid {
