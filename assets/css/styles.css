@@ -894,6 +894,16 @@ textarea:focus {
   margin-top: 8px;
 }
 
+.readonly-field {
+  border: 1px solid #d6dde6;
+  border-radius: 6px;
+  background: #f8fafc;
+  min-height: 36px;
+  padding: 8px 10px;
+  color: #334155;
+  font-weight: 600;
+}
+
 .tab {
   border: 1px solid var(--border);
   background: #f8fafc;

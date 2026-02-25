@@ -9,7 +9,7 @@
     }
   };
 
-  var publicPaths = ["/", "/login", "/register", "/BAchecklist"];
+  var publicPaths = ["/", "/login", "/register", "/BAchecklist", "/BAchecklist.html"];
   var supervisorOnly = ["/dashboard", "/projects/new"];
 
   function el(id) {
@@ -365,7 +365,7 @@
       Router.go("/register");
     });
     el("landing-ba").addEventListener("click", function () {
-      Router.go("/BAchecklist/");
+      Router.go("/BAchecklist.html");
     });
 
     document.querySelectorAll("[data-demo-login]").forEach(function (btn) {
@@ -599,7 +599,7 @@
           : "";
 
         renderLayout(
-          '<div class="dashboard-head card"><div class="dashboard-head-inner"><div><h1 class="page-title dashboard-title">Supervisor Dashboard</h1></div><div class="dashboard-head-kpis"><span class="badge on-track">Visible projects: ' + visibleProjects.length + '</span><span class="badge at-risk">Overdue: ' + payload.stats.overdue + '</span><span class="badge info">Active students this week: ' + payload.stats.activeStudents + '</span></div></div></div>' +
+          '<div class="dashboard-head card"><div class="dashboard-head-inner"><div><h1 class="page-title dashboard-title">Supervisor Dashboard</h1></div><div class="dashboard-head-kpis"><span class="badge on-track">Visible projects: ' + visibleProjects.length + '</span><span class="badge at-risk">Overdue: ' + payload.stats.overdue + '</span><span class="badge info">Active students this week: ' + payload.stats.activeStudents + '</span><button class="btn small ghost" id="dashboard-ba-btn">BA Checklist</button></div></div></div>' +
           '<div class="grid cards-5 dashboard-kpis" style="margin-bottom:14px">' +
             metricCard("Total Projects", payload.stats.total) +
             metricCard("On Track", payload.stats.onTrack) +
@@ -641,6 +641,12 @@
               currentPage += 1;
               renderDashboardPage();
             }
+          });
+        }
+        var baBtn = el("dashboard-ba-btn");
+        if (baBtn) {
+          baBtn.addEventListener("click", function () {
+            Router.go("/BAchecklist.html");
           });
         }
         bindOpenProjectButtons();
@@ -858,7 +864,7 @@
       var checklistBtn = el("wizard-ba-checklist");
       if (checklistBtn) {
         checklistBtn.addEventListener("click", function () {
-          Router.go("/BAchecklist/");
+          Router.go("/BAchecklist.html");
         });
       }
     }
@@ -1374,6 +1380,18 @@
       var lastBy = item.updatedByUserId ? Store.getUserById(item.updatedByUserId) : null;
       var readOnly = !isSupervisor;
       var altList = item.alternatives.length ? "<ul>" + item.alternatives.map(function (a) { return "<li>" + UI.escapeHtml(a) + "</li>"; }).join("") + "</ul>" : '<div class="meta">No alternatives listed.</div>';
+      var statusField = readOnly
+        ? '<div><label>Status</label><div class="readonly-field">' + item.status + "</div></div>"
+        : '<div><label>Status</label><select data-fin-status="' + item.id + '">' + statuses.map(function (s) { return '<option ' + (item.status === s ? "selected" : "") + ">" + s + "</option>"; }).join("") + "</select></div>";
+      var priorityField = readOnly
+        ? '<div><label>Priority</label><div class="readonly-field">' + item.priority + "</div></div>"
+        : '<div><label>Priority</label><select data-fin-priority="' + item.id + '"><option ' + (item.priority === "MUST" ? "selected" : "") + '>MUST</option><option ' + (item.priority === "SHOULD" ? "selected" : "") + '>SHOULD</option><option ' + (item.priority === "COULD" ? "selected" : "") + '>COULD</option></select></div>';
+      var impactField = readOnly
+        ? '<div><label>Impact</label><div class="readonly-field">' + item.impact + "</div></div>"
+        : '<div><label>Impact</label><select data-fin-impact="' + item.id + '"><option ' + (item.impact === "HIGH" ? "selected" : "") + '>HIGH</option><option ' + (item.impact === "MEDIUM" ? "selected" : "") + '>MEDIUM</option><option ' + (item.impact === "LOW" ? "selected" : "") + '>LOW</option></select></div>';
+      var ownerField = readOnly
+        ? '<div><label>Owner</label><div class="readonly-field">' + item.owner + "</div></div>"
+        : '<div><label>Owner</label><select data-fin-owner="' + item.id + '"><option ' + (item.owner === "CLIENT" ? "selected" : "") + '>CLIENT</option><option ' + (item.owner === "TEAM" ? "selected" : "") + '>TEAM</option></select></div>';
       return '<div class="finalize-detail finalize-modal-detail">' +
         '<div class="finalize-detail-grid">' +
         '<div><h4>Business intent</h4><p>' + UI.escapeHtml(item.businessIntent || "-") + '</p></div>' +
@@ -1383,10 +1401,10 @@
         '</div>' +
         '<div class="finalize-decision-row">' +
         '<div class="form-grid">' +
-        '<div><label>Status</label><select data-fin-status="' + item.id + '" ' + (readOnly ? "disabled" : "") + '>' + statuses.map(function (s) { return '<option ' + (item.status === s ? "selected" : "") + ">" + s + "</option>"; }).join("") + "</select></div>" +
-        '<div><label>Priority</label><select data-fin-priority="' + item.id + '" ' + (readOnly ? "disabled" : "") + '><option ' + (item.priority === "MUST" ? "selected" : "") + '>MUST</option><option ' + (item.priority === "SHOULD" ? "selected" : "") + '>SHOULD</option><option ' + (item.priority === "COULD" ? "selected" : "") + '>COULD</option></select></div>' +
-        '<div><label>Impact</label><select data-fin-impact="' + item.id + '" ' + (readOnly ? "disabled" : "") + '><option ' + (item.impact === "HIGH" ? "selected" : "") + '>HIGH</option><option ' + (item.impact === "MEDIUM" ? "selected" : "") + '>MEDIUM</option><option ' + (item.impact === "LOW" ? "selected" : "") + '>LOW</option></select></div>' +
-        '<div><label>Owner</label><select data-fin-owner="' + item.id + '" ' + (readOnly ? "disabled" : "") + '><option ' + (item.owner === "CLIENT" ? "selected" : "") + '>CLIENT</option><option ' + (item.owner === "TEAM" ? "selected" : "") + '>TEAM</option></select></div>' +
+        statusField +
+        priorityField +
+        impactField +
+        ownerField +
         '<div class="full"><label>Client decision</label><textarea rows="3" data-fin-decision="' + item.id + '" ' + (readOnly ? "readonly" : "") + ' placeholder="Document the agreed decision...">' + UI.escapeHtml(item.clientDecision || "") + "</textarea></div>" +
         '</div>' +
         (readOnly ? '<div class="notice">Read-only for student role.</div>' : "") +
@@ -1787,7 +1805,7 @@
     }
 
     if (state.route.path === "/finalize") {
-      Router.go("/BAchecklist/");
+      Router.go("/BAchecklist.html");
       return;
     }
 

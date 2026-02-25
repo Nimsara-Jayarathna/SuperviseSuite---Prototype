@@ -35,6 +35,10 @@
       route.params.id = segments[1];
     }
 
+    if (route.path === "/BAchecklist.html") {
+      route.path = "/BAchecklist";
+    }
+
     if (cleanPath === "/") {
       route.path = "/";
     }
