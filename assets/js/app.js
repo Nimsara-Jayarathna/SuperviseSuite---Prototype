@@ -201,7 +201,7 @@
     }
 
     return '<div class="topbar-left"><button class="btn ghost small menu-btn" id="menu-toggle" aria-label="Toggle menu">Menu</button><div class="search-wrap"><input class="search-input" id="global-search" placeholder="Search projects or students" value="' + UI.escapeHtml(state.search) + '"/></div></div>' +
-      '<div class="topbar-right"><span class="meta">' + UI.escapeHtml(state.user.role) + '</span><strong>' + UI.escapeHtml(state.user.name) + '</strong><button class="btn small" id="logout-btn">Logout</button></div>';
+      '<div class="topbar-right"><span class="topbar-role">' + UI.escapeHtml(state.user.role) + '</span><strong class="topbar-user">' + UI.escapeHtml(state.user.name) + '</strong><button class="btn small topbar-logout" id="logout-btn">Logout</button></div>';
   }
 
   function enforceRouteGuards(route) {
@@ -568,22 +568,18 @@
           '<td><span class="scan-count scan-count-neutral">' + summary.openActionItems + '</span></td>' +
           '<td><span class="scan-count ' + (summary.overdueCount > 0 ? "scan-count-critical" : "scan-count-ok") + '">' + summary.overdueCount + '</span></td>' +
           '<td><div>' + UI.formatDate(p.milestoneDate) + '</div><div class="meta"><span class="scan-urgency scan-urgency-' + milestone.tone + '">' + milestone.label + '</span> ' + milestoneDeltaText(p.milestoneDate) + '</div></td>' +
-          '<td><div class="quick-actions quick-actions-' + rowTone + '"><button class="btn small" data-open-project="' + p.id + '">Open</button> <button class="btn small" data-open-tab="meetings" data-open-project="' + p.id + '">Meetings</button> <button class="btn small" data-open-tab="files" data-open-project="' + p.id + '">Files</button></div></td>' +
+          '<td><div class="quick-actions quick-actions-' + rowTone + '"><button class="btn small action-btn-open" data-open-project="' + p.id + '">Open</button> <button class="btn small action-btn-meetings" data-open-tab="meetings" data-open-project="' + p.id + '">Meetings</button> <button class="btn small action-btn-files" data-open-tab="files" data-open-project="' + p.id + '">Files</button></div></td>' +
           "</tr>";
       }).join("");
 
       renderLayout(
-        '<div class="dashboard-head card"><div class="row wrap" style="justify-content:space-between;align-items:flex-start"><div><h1 class="page-title" style="margin-bottom:8px">Supervisor Dashboard</h1><div class="meta">Portfolio overview, delivery health, and intervention-ready actions.</div></div><div class="row wrap"><span class="badge on-track">Visible projects: ' + visibleProjects.length + '</span><span class="badge at-risk">Overdue: ' + payload.stats.overdue + '</span></div></div></div>' +
+        '<div class="dashboard-head card"><div class="dashboard-head-inner"><div><h1 class="page-title dashboard-title">Supervisor Dashboard</h1><div class="meta">Portfolio overview, delivery health, and intervention-ready actions.</div></div><div class="dashboard-head-kpis"><span class="badge on-track">Visible projects: ' + visibleProjects.length + '</span><span class="badge at-risk">Overdue: ' + payload.stats.overdue + '</span><span class="badge info">Active students this week: ' + payload.stats.activeStudents + '</span></div></div></div>' +
         '<div class="grid cards-5 dashboard-kpis" style="margin-bottom:14px">' +
           metricCard("Total Projects", payload.stats.total) +
           metricCard("On Track", payload.stats.onTrack) +
           metricCard("At Risk", payload.stats.atRisk) +
           metricCard("Behind", payload.stats.behind) +
           metricCard("Overdue Action Items", payload.stats.overdue) +
-        "</div>" +
-        '<div class="grid cards-4" style="margin-bottom:14px">' +
-          metricCard("Active Students This Week", payload.stats.activeStudents) +
-          '<div class="card dashboard-note" style="grid-column: span 3"><div class="metric-label">Lifecycle Model</div><div class="meta">KPIs map ACTIVE to On Track, AT_RISK to At Risk, and BEHIND to Behind.</div></div>' +
         "</div>" +
         '<div class="card project-health-card" style="margin-bottom:14px"><div class="row wrap" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Project Health Table</h3><div class="meta">Showing ' + visibleProjects.length + " of " + payload.projects.length + ' projects</div></div><div class="table-wrap"><table class="table"><thead><tr><th>Project</th><th>Status</th><th>Last Activity</th><th>Open Actions</th><th>Overdue</th><th>Next Milestone</th><th>Quick Actions</th></tr></thead><tbody>' +
         (rows || '<tr><td colspan="7"><div class="empty">No projects match current search.</div></td></tr>') +
@@ -715,30 +711,35 @@
       commsLink: ""
     };
 
+    function selectedStudentCount() {
+      return data.studentIds.length;
+    }
+
     function screen() {
-      var html = title("Create New Project") + '<div class="card">';
-      html += '<div class="tabs"><span class="tab ' + (step === 1 ? "active" : "") + '">Step 1: Basic Info</span><span class="tab ' + (step === 2 ? "active" : "") + '">Step 2: Connections</span></div>';
+      var html = title("Create New Project") + '<div class="card wizard-shell">';
+      html += '<div class="wizard-steps"><span class="wizard-step ' + (step === 1 ? "active" : "") + '">Step 1: Basic Info</span><span class="wizard-step ' + (step === 2 ? "active" : "") + '">Step 2: Connections</span></div>';
       if (step === 1) {
-        html += '<div class="form-grid">' +
-          '<div class="full"><label>Project Title *</label><input id="w-title" value="' + UI.escapeHtml(data.title) + '"/></div>' +
+        html += '<div class="wizard-section"><h3>Project Basics</h3><div class="meta">Capture the core identity and delivery timeline.</div><div class="form-grid">' +
+          '<div class="full"><label>Project Title *</label><input id="w-title" placeholder="e.g., Smart Attendance Tracker" value="' + UI.escapeHtml(data.title) + '"/></div>' +
           '<div><label>Batch</label><input id="w-batch" value="' + UI.escapeHtml(data.batch) + '"/></div>' +
           '<div><label>Semester</label><input id="w-sem" value="' + UI.escapeHtml(data.semester) + '"/></div>' +
           '<div><label>Next Milestone Date *</label><input id="w-milestone" type="date" value="' + UI.escapeHtml(data.milestoneDate) + '"/></div>' +
-          '<div class="full"><label>Assign Students *</label><div class="row wrap">' +
+          '</div></div>' +
+          '<div class="wizard-section"><div class="row wrap" style="justify-content:space-between"><h3 style="margin:0">Team Assignment</h3><div class="meta" id="w-student-count">' + selectedStudentCount() + ' selected</div></div><div class="meta">Choose at least one student to continue.</div><div class="wizard-students">' +
           students.map(function (s) {
             var checked = data.studentIds.indexOf(s.id) > -1 ? "checked" : "";
-            return '<label class="btn small"><input type="checkbox" data-student="' + s.id + '" ' + checked + '/> ' + UI.escapeHtml(s.name) + "</label>";
+            return '<label class="student-pick"><input type="checkbox" data-student="' + s.id + '" ' + checked + '/><span>' + UI.escapeHtml(s.name) + "</span></label>";
           }).join("") +
-          "</div></div></div>";
+          "</div></div>";
       } else {
-        html += '<div class="form-grid">' +
-          '<div class="full"><label>Communication Link * (Teams/Discord/WhatsApp)</label><input id="w-comms" value="' + UI.escapeHtml(data.commsLink) + '"/></div>' +
-          '<div class="full"><label>GitHub Repo URL</label><input id="w-gh" value="' + UI.escapeHtml(data.githubUrl) + '"/></div>' +
-          '<div><label>Jira Project Key</label><input id="w-jira" value="' + UI.escapeHtml(data.jiraProjectKey) + '"/></div>' +
-          '<div><label>Jira Board Link (optional)</label><input id="w-jira-board" value="' + UI.escapeHtml(data.jiraBoardLink) + '"/></div>' +
-          "</div>";
+        html += '<div class="wizard-section"><h3>Communication & Integrations</h3><div class="meta">Configure collaboration channel first, then optional tooling links.</div><div class="form-grid">' +
+          '<div class="full"><label>Communication Link * (Teams/Discord/WhatsApp)</label><input id="w-comms" placeholder="https://teams.microsoft.com/..." value="' + UI.escapeHtml(data.commsLink) + '"/></div>' +
+          '<div class="full"><label>GitHub Repo URL</label><input id="w-gh" placeholder="https://github.com/org/repo" value="' + UI.escapeHtml(data.githubUrl) + '"/></div>' +
+          '<div><label>Jira Project Key</label><input id="w-jira" placeholder="ABC" value="' + UI.escapeHtml(data.jiraProjectKey) + '"/></div>' +
+          '<div><label>Jira Board Link (optional)</label><input id="w-jira-board" placeholder="https://jira.example.com/boards/123" value="' + UI.escapeHtml(data.jiraBoardLink) + '"/></div>' +
+          "</div></div>";
       }
-      html += '<div class="row" style="justify-content:flex-end;margin-top:14px">';
+      html += '<div class="wizard-footer row wrap" style="justify-content:flex-end;margin-top:14px">';
       if (step === 2) {
         html += '<button class="btn" id="wizard-back">Back</button>';
       }
@@ -778,6 +779,18 @@
           UI.toast("Project created");
           Router.go("#/projects/" + created.id);
         }
+      });
+
+      document.querySelectorAll("[data-student]").forEach(function (node) {
+        node.addEventListener("change", function () {
+          data.studentIds = Array.prototype.slice.call(document.querySelectorAll("[data-student]:checked")).map(function (c) {
+            return c.getAttribute("data-student");
+          });
+          var countNode = el("w-student-count");
+          if (countNode) {
+            countNode.textContent = data.studentIds.length + " selected";
+          }
+        });
       });
 
       var back = el("wizard-back");
