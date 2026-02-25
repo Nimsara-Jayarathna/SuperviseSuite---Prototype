@@ -255,6 +255,53 @@ textarea:focus {
   background: rgba(219, 234, 254, 0.26);
 }
 
+.action-items-table th,
+.action-items-table td {
+  white-space: normal;
+  vertical-align: top;
+}
+
+.action-items-table .action-desc {
+  min-width: 220px;
+  max-width: 320px;
+  line-height: 1.35;
+}
+
+.action-items-table .action-control.compact {
+  min-width: 96px;
+  max-width: 140px;
+}
+
+.action-items-table .action-due-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.action-items-table .action-notes {
+  display: grid;
+  gap: 8px;
+  min-width: 250px;
+  max-width: 320px;
+}
+
+.action-items-table .action-comment {
+  min-height: 56px;
+  resize: vertical;
+}
+
+.action-items-table .action-btn-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.action-items-table .action-locked {
+  margin-bottom: 6px;
+}
+
 .badge {
   padding: 5px 9px;
   border-radius: 999px;
@@ -607,6 +654,20 @@ a {
   .split,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .action-items-table .action-desc {
+    min-width: 170px;
+    max-width: 220px;
+  }
+
+  .action-items-table .action-notes {
+    min-width: 200px;
+    max-width: 240px;
+  }
+
+  .action-items-table .action-btn-stack {
+    min-width: 180px;
   }
 }
 

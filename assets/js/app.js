@@ -930,31 +930,35 @@
     }
 
     if (currentTab === "action-items") {
-      tabBody.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr><th>Description</th><th>Assignee</th><th>Due</th><th>Status</th><th>Priority</th><th>Meeting</th><th>Jira</th><th>Comment / Evidence</th><th>Actions</th></tr></thead><tbody>' +
+      tabBody.innerHTML = '<div class="table-wrap"><table class="table action-items-table"><thead><tr><th>Description</th><th>Assignee</th><th>Due</th><th>Status</th><th>Priority</th><th>Meeting</th><th>Jira</th><th>Comment / Evidence</th><th>Actions</th></tr></thead><tbody>' +
       (actions.map(function (a) {
         var canEditAction = Store.canEditActionItem(state.user, a, project);
         var lockFields = a.fieldsLocked;
         var fieldDisabled = (!canEditAction || lockFields) ? "disabled" : "";
         var statusDisabled = !canEditAction ? "disabled" : "";
         return '<tr>' +
-          '<td>' + UI.escapeHtml(a.description) + '</td>' +
-          '<td><select data-action-assignee="' + a.id + '" ' + fieldDisabled + '>' + students.filter(function (s) {
+          '<td><div class="action-desc">' + UI.escapeHtml(a.description) + '</div></td>' +
+          '<td><select class="action-control compact" data-action-assignee="' + a.id + '" ' + fieldDisabled + '>' + students.filter(function (s) {
             return project.studentIds.indexOf(s.id) > -1;
           }).map(function (s) {
             var selected = (s.id === (a.assigneeId || a.ownerId)) ? "selected" : "";
             return '<option value="' + s.id + '" ' + selected + '>' + UI.escapeHtml(s.name) + '</option>';
           }).join("") + "</select></td>" +
-          '<td><input data-action-due="' + a.id + '" type="date" value="' + UI.escapeHtml(a.dueDate) + '" ' + fieldDisabled + '/>' + (a.isOverdue ? ' <span class="badge behind">Overdue</span>' : "") + '</td>' +
-          '<td><select data-action-status="' + a.id + '" ' + statusDisabled + '><option ' + (a.status === "Todo" ? "selected" : "") + '>Todo</option><option ' + (a.status === "In Progress" ? "selected" : "") + '>In Progress</option><option ' + (a.status === "Done" ? "selected" : "") + '>Done</option></select></td>' +
-          '<td><select data-action-priority="' + a.id + '" ' + fieldDisabled + '><option value="LOW" ' + (a.priority === "LOW" ? "selected" : "") + '>LOW</option><option value="MEDIUM" ' + (a.priority === "MEDIUM" ? "selected" : "") + '>MEDIUM</option><option value="HIGH" ' + (a.priority === "HIGH" ? "selected" : "") + '>HIGH</option></select></td>' +
+          '<td><div class="action-due-wrap"><input class="action-control compact" data-action-due="' + a.id + '" type="date" value="' + UI.escapeHtml(a.dueDate) + '" ' + fieldDisabled + '/>' + (a.isOverdue ? ' <span class="badge behind">Overdue</span>' : "") + '</div></td>' +
+          '<td><select class="action-control compact" data-action-status="' + a.id + '" ' + statusDisabled + '><option ' + (a.status === "Todo" ? "selected" : "") + '>Todo</option><option ' + (a.status === "In Progress" ? "selected" : "") + '>In Progress</option><option ' + (a.status === "Done" ? "selected" : "") + '>Done</option></select></td>' +
+          '<td><select class="action-control compact" data-action-priority="' + a.id + '" ' + fieldDisabled + '><option value="LOW" ' + (a.priority === "LOW" ? "selected" : "") + '>LOW</option><option value="MEDIUM" ' + (a.priority === "MEDIUM" ? "selected" : "") + '>MEDIUM</option><option value="HIGH" ' + (a.priority === "HIGH" ? "selected" : "") + '>HIGH</option></select></td>' +
           '<td>' + UI.escapeHtml((meetings.find(function (m) { return m.id === a.meetingId; }) || {}).title || "-") + '</td>' +
           '<td>' + (a.jira ? '<a href="' + UI.escapeHtml(a.jira.url) + '" target="_blank">' + UI.escapeHtml(a.jira.key) + '</a>' : "-") + '</td>' +
-          '<td><textarea data-action-comment="' + a.id + '" rows="2" placeholder="Add comment"></textarea><input data-action-evidence="' + a.id + '" placeholder="Evidence link" value="' + UI.escapeHtml(a.evidenceLink || "") + '" /></td>' +
+          '<td><div class="action-notes"><textarea class="action-control action-comment" data-action-comment="' + a.id + '" rows="2" placeholder="Add comment"></textarea><input class="action-control action-evidence" data-action-evidence="' + a.id + '" placeholder="Evidence link" value="' + UI.escapeHtml(a.evidenceLink || "") + '" /></div></td>' +
           '<td>' +
-          (lockFields ? '<div class="notice">Locked fields</div>' : "") +
+          (lockFields ? '<div class="notice action-locked">Locked fields</div>' : "") +
           (canEditAction
-            ? (lockFields ? "" : '<button class="btn small" data-save-action="' + a.id + '">Save Fields</button> ') +
-              '<button class="btn small" data-update-action-status="' + a.id + '">Update Status</button> <button class="btn small" data-create-jira="' + a.id + '">Create Jira Task</button> <button class="btn small" data-link-jira="' + a.id + '">Link Jira</button>'
+            ? '<div class="action-btn-stack">' +
+              (lockFields ? "" : '<button class="btn small" data-save-action="' + a.id + '">Save Fields</button>') +
+              '<button class="btn small" data-update-action-status="' + a.id + '">Update Status</button>' +
+              '<button class="btn small" data-create-jira="' + a.id + '">Create Jira Task</button>' +
+              '<button class="btn small" data-link-jira="' + a.id + '">Link Jira</button>' +
+              '</div>'
             : '<span class="notice">Read-only</span>') +
           '</td>' +
           "</tr>";
