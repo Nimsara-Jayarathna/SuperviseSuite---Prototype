@@ -58,7 +58,7 @@
     if (location.hash && location.hash.startsWith("#/")) {
       return parseRouteFrom(location.hash.slice(1));
     }
-    return parseRouteFrom(location.pathname + location.search);
+    return parseRouteFrom("/");
   }
 
   function onChange(handler) {
@@ -74,14 +74,15 @@
 
   function go(path) {
     var normalized = normalizePath(path || "/");
-    if (location.pathname + location.search !== normalized) {
-      history.pushState({}, "", normalized);
+    if (location.hash !== "#" + normalized) {
+      location.hash = "#" + normalized;
+    } else {
+      notify();
     }
-    notify();
   }
 
   function start() {
-    window.addEventListener("popstate", notify);
+    window.addEventListener("hashchange", notify);
     document.addEventListener("click", function (event) {
       var anchor = event.target.closest("a[href]");
       if (!anchor) {
@@ -103,8 +104,8 @@
       }
     });
     window.addEventListener("load", function () {
-      if (location.hash && location.hash.startsWith("#/")) {
-        history.replaceState({}, "", normalizePath(location.hash.slice(1)));
+      if (!location.hash || !location.hash.startsWith("#/")) {
+        location.hash = "#/";
       }
       notify();
     });
