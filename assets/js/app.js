@@ -10,7 +10,8 @@
   };
 
   var publicPaths = ["/", "/login", "/register", "/BAchecklist", "/BAchecklist.html"];
-  var supervisorOnly = ["/dashboard", "/projects/new"];
+  var supervisorPrefix = "/supervisor";
+  var studentPrefix = "/student";
 
   function el(id) {
     return document.getElementById(id);
@@ -29,7 +30,7 @@
   }
 
   function roleHome(role) {
-    return role === "SUPERVISOR" ? "/dashboard" : "/student";
+    return role === "SUPERVISOR" ? "/supervisor/dashboard" : "/student/projects";
   }
 
   function badgeClassForLifecycle(status) {
@@ -177,19 +178,18 @@
 
     var items = state.user.role === "SUPERVISOR"
       ? [
-        { key: "dashboard", label: "Dashboard", path: "/dashboard" },
-        { key: "projects", label: "Projects", path: "/projects" }
+        { key: "dashboard", label: "Dashboard", path: "/supervisor/dashboard" },
+        { key: "projects", label: "Projects", path: "/supervisor/projects" }
       ]
       : [
-        { key: "student", label: "Student Home", path: "/student" },
-        { key: "projects", label: "My Projects", path: "/projects" }
+        { key: "projects", label: "My Projects", path: "/student/projects" }
       ];
 
     var activePath = state.route ? state.route.path : "";
 
     return '<div class="brand">SuperviseSuite</div><div class="nav-group">' +
       items.map(function (item) {
-        var isActive = activePath.indexOf(item.key) !== -1 || (activePath === "/projects/:id" && item.key === "projects");
+        var isActive = activePath.indexOf(item.path) === 0 || (activePath.indexOf("/projects/:id") !== -1 && item.key === "projects");
         return '<button class="nav-item ' + (isActive ? "active" : "") + '" data-nav="' + item.path + '">' + UI.escapeHtml(item.label) + "</button>";
       }).join("") +
       "</div>";
@@ -241,20 +241,25 @@
       return false;
     }
 
-    if (state.user.role === "STUDENT" && supervisorOnly.indexOf(route.path) > -1) {
-      Router.go("/student");
+    if (state.user.role === "STUDENT" && route.path.startsWith(supervisorPrefix)) {
+      Router.go("/student/projects");
       return false;
     }
 
-    if (state.user.role === "SUPERVISOR" && route.path === "/student") {
-      Router.go("/dashboard");
+    if (state.user.role === "SUPERVISOR" && route.path.startsWith(studentPrefix)) {
+      Router.go("/supervisor/dashboard");
       return false;
     }
 
-    if (route.path === "/projects/:id" && state.user.role === "STUDENT") {
+    // Role-specific project access
+    if (route.path.indexOf("/projects/:id") !== -1) {
       var project = Store.getProjectById(route.params.id);
-      if (!project || project.studentIds.indexOf(state.user.id) === -1) {
-        Router.go("/student");
+      if (!project) {
+        Router.go(roleHome(state.user.role));
+        return false;
+      }
+      if (state.user.role === "STUDENT" && project.studentIds.indexOf(state.user.id) === -1) {
+        Router.go("/student/projects");
         return false;
       }
     }
@@ -306,7 +311,7 @@
     shell.classList.toggle("public-shell", isPublicShell);
     shell.classList.toggle("public-doc-shell", isPublicDocShell);
 
-    if (isPublicShell) {
+    if (isPublicShell || (state.user && state.user.role === "STUDENT")) {
       el("sidebar").classList.add("hidden");
       el("topbar").classList.add("hidden");
       closeSidebar();
@@ -519,7 +524,7 @@
 
         var target = loginWithCredentials(payload.email, payload.password);
         UI.toast("Registration successful");
-        Router.go(target || "/student");
+        Router.go(target || "/student/projects");
       });
     });
   }
@@ -599,18 +604,18 @@
           : "";
 
         renderLayout(
-          '<div class="dashboard-head card"><div class="dashboard-head-inner"><div><h1 class="page-title dashboard-title">Supervisor Dashboard</h1></div><div class="dashboard-head-kpis"><span class="badge on-track">Visible projects: ' + visibleProjects.length + '</span><span class="badge at-risk">Overdue: ' + payload.stats.overdue + '</span><span class="badge info">Active students this week: ' + payload.stats.activeStudents + '</span><button class="btn small ghost" id="dashboard-ba-btn">BA Checklist</button></div></div></div>' +
+          '<div class="dashboard-head card"><div class="dashboard-head-inner"><div><h1 class="page-title dashboard-title">Dashboard</h1></div><div class="dashboard-head-kpis"><span class="badge on-track">Visible projects: ' + visibleProjects.length + '</span><span class="badge at-risk">Overdue: ' + payload.stats.overdue + '</span><button class="btn small ghost" id="dashboard-ba-btn">BA Checklist</button></div></div></div>' +
           '<div class="grid cards-5 dashboard-kpis" style="margin-bottom:14px">' +
-            metricCard("Total Projects", payload.stats.total) +
-            metricCard("On Track", payload.stats.onTrack) +
-            metricCard("At Risk", payload.stats.atRisk) +
-            metricCard("Behind", payload.stats.behind) +
-            metricCard("Overdue Action Items", payload.stats.overdue) +
+          metricCard("Total Projects", payload.stats.total) +
+          metricCard("On Track", payload.stats.onTrack) +
+          metricCard("At Risk", payload.stats.atRisk) +
+          metricCard("Behind", payload.stats.behind) +
+          metricCard("Overdue Action Items", payload.stats.overdue) +
           "</div>" +
-          '<div class="card project-health-card" style="margin-bottom:14px"><div class="row wrap" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Project Health Table</h3><div class="row wrap">' + filterChip + '<div class="meta">' + tableMeta + '</div></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Project</th><th>Status</th><th>Last Activity</th><th>Open Actions</th><th>Overdue</th><th>Next Milestone</th><th>Quick Actions</th></tr></thead><tbody>' +
+          '<div class="card project-health-card" style="margin-bottom:14px"><div class="row wrap" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">Project Health</h3><div class="row wrap">' + filterChip + '<div class="meta">' + tableMeta + '</div></div></div><div class="table-wrap"><table class="table"><thead><tr><th>Project</th><th>Status</th><th>Last Activity</th><th>Open Actions</th><th>Overdue</th><th>Next Milestone</th><th>Quick Actions</th></tr></thead><tbody>' +
           (rows || '<tr><td colspan="7"><div class="empty">No projects match current search.</div></td></tr>') +
           "</tbody></table></div>" + pagination + "</div>" +
-          '<div class="split"><div class="card"><h3 style="margin:0 0 10px">Activity Over Time (6 weeks)</h3><canvas id="activity-line" width="620" height="220"></canvas></div><div class="card"><h3 style="margin:0 0 10px">Commits by Project</h3><canvas id="activity-bars" width="310" height="220"></canvas></div></div>'
+          '<div class="split"><div class="card"><h3 style="margin:0 0 10px">Activity Over Time</h3><canvas id="activity-line" width="620" height="220"></canvas></div><div class="card"><h3 style="margin:0 0 10px">Commits by Project</h3><canvas id="activity-bars" width="310" height="220"></canvas></div></div>'
         );
 
         var weeks = ["W-5", "W-4", "W-3", "W-2", "W-1", "Now"];
@@ -664,7 +669,8 @@
       var openProject = function () {
         var id = node.getAttribute("data-open-project");
         var tab = node.getAttribute("data-open-tab");
-        var target = "/projects/" + id;
+        var prefix = state.user.role === "SUPERVISOR" ? supervisorPrefix : studentPrefix;
+        var target = prefix + "/projects/" + id;
         if (tab) {
           target += "?tab=" + tab;
         }
@@ -686,7 +692,8 @@
     var users = Store.listStudents();
 
     renderLayout(
-      title(state.user.role === "SUPERVISOR" ? "Projects" : "My Projects") +
+      '<div class="row wrap" style="justify-content:space-between;align-items:center;margin-bottom:16px"><h1 class="page-title" style="margin:0">' + (state.user.role === "SUPERVISOR" ? "All Projects" : "My Projects") + '</h1>' +
+      (state.user.role === "STUDENT" ? '<button class="btn ghost" id="student-logout-btn">Logout</button>' : "") + '</div>' +
       '<div class="card" style="margin-bottom:14px"><div class="row wrap">' +
       '<input id="project-search" placeholder="Search by title/student" style="max-width:240px" value="' + UI.escapeHtml(state.search) + '" />' +
       '<select id="filter-status" style="max-width:180px"><option value="">All Lifecycle</option><option value="DRAFT">DRAFT</option><option value="ACTIVE">ACTIVE</option><option value="AT_RISK">AT_RISK</option><option value="BEHIND">BEHIND</option><option value="COMPLETED">COMPLETED</option><option value="ARCHIVED">ARCHIVED</option></select>' +
@@ -741,7 +748,17 @@
     var np = el("new-project-btn");
     if (np) {
       np.addEventListener("click", function () {
-        Router.go("/projects/new");
+        Router.go("/supervisor/projects/new");
+      });
+    }
+
+    var sl = el("student-logout-btn");
+    if (sl) {
+      sl.addEventListener("click", function () {
+        Store.clearSession();
+        state.user = null;
+        UI.toast("Logged out");
+        Router.go("/");
       });
     }
 
@@ -895,7 +912,7 @@
       return '<button class="tab ' + (currentTab === t ? "active" : "") + '" data-tab="' + t + '">' + label + "</button>";
     }
 
-    var html = title(project.title) +
+    var html = '<div class="row" style="margin-bottom:16px"><h1 class="page-title" style="margin:0">' + UI.escapeHtml(project.title) + '</h1></div>' +
       '<div class="card" style="margin-bottom:12px"><div class="tabs">' +
       tabButton("overview", "Overview") +
       tabButton("activity", "Activity") +
@@ -907,7 +924,8 @@
     renderLayout(html);
     document.querySelectorAll("[data-tab]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        Router.go("/projects/" + projectId + "?tab=" + btn.getAttribute("data-tab"));
+        var prefix = state.user.role === "SUPERVISOR" ? supervisorPrefix : studentPrefix;
+        Router.go(prefix + "/projects/" + projectId + "?tab=" + btn.getAttribute("data-tab"));
       });
     });
 
@@ -980,15 +998,15 @@
 
     if (currentTab === "meetings") {
       tabBody.innerHTML = '<div class="row" style="justify-content:space-between;margin-bottom:10px"><h3 style="margin:0">Meetings</h3>' + (canManageMeetings ? '<button class="btn primary" id="add-meeting">Add Meeting Minutes</button>' : "") + '</div>' +
-      '<div class="table-wrap"><table class="table"><thead><tr><th>Title</th><th>Date</th><th>Status</th><th>Summary</th><th>Actions</th></tr></thead><tbody>' +
-      (meetings.map(function (m) {
-        return '<tr><td>' + UI.escapeHtml(m.title) + '</td><td>' + UI.formatDate(m.date) + '</td><td>' + meetingStatusBadge(m.status) + '</td><td>' + UI.escapeHtml(m.summary.slice(0, 70)) + '</td><td><button class="btn small" data-view-meeting="' + m.id + '">View</button>' +
-          ((m.status === "DRAFT" && canManageMeetings) ? ' <button class="btn small" data-submit-meeting="' + m.id + '">Submit</button>' : "") +
-          ((m.status === "SUBMITTED" && canEdit) ? ' <button class="btn small" data-approve-meeting="' + m.id + '">Approve</button>' : "") +
-          ((m.status === "APPROVED") ? ' <span class="notice"> Locked</span>' : "") +
-          '</td></tr>';
-      }).join("") || '<tr><td colspan="5"><div class="empty">No meetings yet.</div></td></tr>') +
-      '</tbody></table></div>';
+        '<div class="table-wrap"><table class="table"><thead><tr><th>Title</th><th>Date</th><th>Status</th><th>Summary</th><th>Actions</th></tr></thead><tbody>' +
+        (meetings.map(function (m) {
+          return '<tr><td>' + UI.escapeHtml(m.title) + '</td><td>' + UI.formatDate(m.date) + '</td><td>' + meetingStatusBadge(m.status) + '</td><td>' + UI.escapeHtml(m.summary.slice(0, 70)) + '</td><td><button class="btn small" data-view-meeting="' + m.id + '">View</button>' +
+            ((m.status === "DRAFT" && canManageMeetings) ? ' <button class="btn small" data-submit-meeting="' + m.id + '">Submit</button>' : "") +
+            ((m.status === "SUBMITTED" && canEdit) ? ' <button class="btn small" data-approve-meeting="' + m.id + '">Approve</button>' : "") +
+            ((m.status === "APPROVED") ? ' <span class="notice"> Locked</span>' : "") +
+            '</td></tr>';
+        }).join("") || '<tr><td colspan="5"><div class="empty">No meetings yet.</div></td></tr>') +
+        '</tbody></table></div>';
 
       if (canManageMeetings) {
         el("add-meeting").addEventListener("click", function () {
@@ -1034,39 +1052,39 @@
 
     if (currentTab === "action-items") {
       tabBody.innerHTML = '<div class="table-wrap"><table class="table action-items-table"><thead><tr><th>Description</th><th>Assignee</th><th>Due</th><th>Status</th><th>Priority</th><th>Meeting</th><th>Jira</th><th>Comment / Evidence</th><th>Actions</th></tr></thead><tbody>' +
-      (actions.map(function (a) {
-        var canEditAction = Store.canEditActionItem(state.user, a, project);
-        var lockFields = a.fieldsLocked;
-        var fieldDisabled = (!canEditAction || lockFields) ? "disabled" : "";
-        var statusDisabled = !canEditAction ? "disabled" : "";
-        return '<tr>' +
-          '<td><div class="action-desc">' + UI.escapeHtml(a.description) + '</div></td>' +
-          '<td><select class="action-control compact" data-action-assignee="' + a.id + '" ' + fieldDisabled + '>' + students.filter(function (s) {
-            return project.studentIds.indexOf(s.id) > -1;
-          }).map(function (s) {
-            var selected = (s.id === (a.assigneeId || a.ownerId)) ? "selected" : "";
-            return '<option value="' + s.id + '" ' + selected + '>' + UI.escapeHtml(s.name) + '</option>';
-          }).join("") + "</select></td>" +
-          '<td><div class="action-due-wrap"><input class="action-control compact" data-action-due="' + a.id + '" type="date" value="' + UI.escapeHtml(a.dueDate) + '" ' + fieldDisabled + '/>' + (a.isOverdue ? ' <span class="badge behind">Overdue</span>' : "") + '</div></td>' +
-          '<td><select class="action-control compact" data-action-status="' + a.id + '" ' + statusDisabled + '><option ' + (a.status === "Todo" ? "selected" : "") + '>Todo</option><option ' + (a.status === "In Progress" ? "selected" : "") + '>In Progress</option><option ' + (a.status === "Done" ? "selected" : "") + '>Done</option></select></td>' +
-          '<td><select class="action-control compact" data-action-priority="' + a.id + '" ' + fieldDisabled + '><option value="LOW" ' + (a.priority === "LOW" ? "selected" : "") + '>LOW</option><option value="MEDIUM" ' + (a.priority === "MEDIUM" ? "selected" : "") + '>MEDIUM</option><option value="HIGH" ' + (a.priority === "HIGH" ? "selected" : "") + '>HIGH</option></select></td>' +
-          '<td>' + UI.escapeHtml((meetings.find(function (m) { return m.id === a.meetingId; }) || {}).title || "-") + '</td>' +
-          '<td>' + (a.jira ? '<a href="' + UI.escapeHtml(a.jira.url) + '" target="_blank">' + UI.escapeHtml(a.jira.key) + '</a>' : "-") + '</td>' +
-          '<td><div class="action-notes"><textarea class="action-control action-comment" data-action-comment="' + a.id + '" rows="2" placeholder="Add comment"></textarea><input class="action-control action-evidence" data-action-evidence="' + a.id + '" placeholder="Evidence link" value="' + UI.escapeHtml(a.evidenceLink || "") + '" /></div></td>' +
-          '<td>' +
-          (lockFields ? '<div class="notice action-locked">Locked fields</div>' : "") +
-          (canEditAction
-            ? '<div class="action-btn-stack">' +
+        (actions.map(function (a) {
+          var canEditAction = Store.canEditActionItem(state.user, a, project);
+          var lockFields = a.fieldsLocked;
+          var fieldDisabled = (!canEditAction || lockFields) ? "disabled" : "";
+          var statusDisabled = !canEditAction ? "disabled" : "";
+          return '<tr>' +
+            '<td><div class="action-desc">' + UI.escapeHtml(a.description) + '</div></td>' +
+            '<td><select class="action-control compact" data-action-assignee="' + a.id + '" ' + fieldDisabled + '>' + students.filter(function (s) {
+              return project.studentIds.indexOf(s.id) > -1;
+            }).map(function (s) {
+              var selected = (s.id === (a.assigneeId || a.ownerId)) ? "selected" : "";
+              return '<option value="' + s.id + '" ' + selected + '>' + UI.escapeHtml(s.name) + '</option>';
+            }).join("") + "</select></td>" +
+            '<td><div class="action-due-wrap"><input class="action-control compact" data-action-due="' + a.id + '" type="date" value="' + UI.escapeHtml(a.dueDate) + '" ' + fieldDisabled + '/>' + (a.isOverdue ? ' <span class="badge behind">Overdue</span>' : "") + '</div></td>' +
+            '<td><select class="action-control compact" data-action-status="' + a.id + '" ' + statusDisabled + '><option ' + (a.status === "Todo" ? "selected" : "") + '>Todo</option><option ' + (a.status === "In Progress" ? "selected" : "") + '>In Progress</option><option ' + (a.status === "Done" ? "selected" : "") + '>Done</option></select></td>' +
+            '<td><select class="action-control compact" data-action-priority="' + a.id + '" ' + fieldDisabled + '><option value="LOW" ' + (a.priority === "LOW" ? "selected" : "") + '>LOW</option><option value="MEDIUM" ' + (a.priority === "MEDIUM" ? "selected" : "") + '>MEDIUM</option><option value="HIGH" ' + (a.priority === "HIGH" ? "selected" : "") + '>HIGH</option></select></td>' +
+            '<td>' + UI.escapeHtml((meetings.find(function (m) { return m.id === a.meetingId; }) || {}).title || "-") + '</td>' +
+            '<td>' + (a.jira ? '<a href="' + UI.escapeHtml(a.jira.url) + '" target="_blank">' + UI.escapeHtml(a.jira.key) + '</a>' : "-") + '</td>' +
+            '<td><div class="action-notes"><textarea class="action-control action-comment" data-action-comment="' + a.id + '" rows="2" placeholder="Add comment"></textarea><input class="action-control action-evidence" data-action-evidence="' + a.id + '" placeholder="Evidence link" value="' + UI.escapeHtml(a.evidenceLink || "") + '" /></div></td>' +
+            '<td>' +
+            (lockFields ? '<div class="notice action-locked">Locked fields</div>' : "") +
+            (canEditAction
+              ? '<div class="action-btn-stack">' +
               (lockFields ? "" : '<button class="btn small" data-save-action="' + a.id + '">Save Fields</button>') +
               '<button class="btn small" data-update-action-status="' + a.id + '">Update Status</button>' +
               '<button class="btn small" data-create-jira="' + a.id + '">Create Jira Task</button>' +
               '<button class="btn small" data-link-jira="' + a.id + '">Link Jira</button>' +
               '</div>'
-            : '<span class="notice">Read-only</span>') +
-          '</td>' +
-          "</tr>";
-      }).join("") || '<tr><td colspan="9"><div class="empty">No action items yet.</div></td></tr>') +
-      '</tbody></table></div>';
+              : '<span class="notice">Read-only</span>') +
+            '</td>' +
+            "</tr>";
+        }).join("") || '<tr><td colspan="9"><div class="empty">No action items yet.</div></td></tr>') +
+        '</tbody></table></div>';
 
       document.querySelectorAll("[data-save-action]").forEach(function (btn) {
         btn.addEventListener("click", function () {
@@ -1307,42 +1325,7 @@
   }
 
   function renderStudentHome() {
-    var projects = Store.getProjectsForUser(state.user);
-    var myActions = Store.listMyActionItems(state.user.id);
-    var soon = myActions.filter(function (a) {
-      var dd = new Date(a.dueDate);
-      var now = new Date();
-      var week = new Date();
-      week.setDate(now.getDate() + 7);
-      return dd >= now && dd <= week && a.status !== "Done";
-    });
-
-    var recentMeetings = [];
-    projects.forEach(function (p) {
-      recentMeetings = recentMeetings.concat(Store.listMeetings(p.id));
-    });
-    recentMeetings.sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
-
-    renderLayout(
-      title("Student Home") +
-      '<div class="split"><div class="card"><h3 style="margin:0 0 10px">Assigned Projects</h3>' +
-      (projects.map(function (p) {
-        return '<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0"><div><strong>' + UI.escapeHtml(p.title) + '</strong><div class="meta">Milestone: ' + UI.formatDate(p.milestoneDate) + " • " + UI.escapeHtml(milestoneDeltaText(p.milestoneDate)) + '</div><div>' + lifecycleBadge(p.lifecycleStatus) + '</div></div><button class="btn small" data-open-project="' + p.id + '">Open</button></div>';
-      }).join("") || '<div class="empty">No assigned projects.</div>') +
-      '</div><div class="card"><h3 style="margin:0 0 10px">My Action Items Due Soon</h3>' +
-      (soon.map(function (a) {
-        return '<div style="border-bottom:1px solid var(--border);padding:8px 0"><strong>' + UI.escapeHtml(a.description) + '</strong><div class="meta">Due ' + UI.formatDate(a.dueDate) + ' | ' + UI.escapeHtml(a.status) + (a.isOverdue ? " | Overdue" : "") + '</div></div>';
-      }).join("") || '<div class="empty">No upcoming due items.</div>') +
-      '</div></div>' +
-      '<div class="card" style="margin-top:14px"><h3 style="margin:0 0 10px">Recent Meetings</h3><div class="table-wrap"><table class="table"><thead><tr><th>Project</th><th>Title</th><th>Date</th></tr></thead><tbody>' +
-      (recentMeetings.slice(0, 8).map(function (m) {
-        var p = byId(projects, m.projectId);
-        return '<tr><td>' + UI.escapeHtml(p ? p.title : "-") + '</td><td>' + UI.escapeHtml(m.title) + '</td><td>' + UI.formatDate(m.date) + '</td></tr>';
-      }).join("") || '<tr><td colspan="3"><div class="empty">No meetings yet.</div></td></tr>') +
-      '</tbody></table></div></div>'
-    );
-
-    bindOpenProjectButtons();
+    Router.go("/projects");
   }
 
   function renderFinalizePage() {
@@ -1779,33 +1762,23 @@
       return;
     }
 
-    if (state.route.path === "/dashboard") {
+    if (state.route.path === "/supervisor/dashboard") {
       renderDashboard();
       return;
     }
 
-    if (state.route.path === "/projects") {
+    if (state.route.path === "/supervisor/projects" || state.route.path === "/student/projects") {
       renderProjectsList();
       return;
     }
 
-    if (state.route.path === "/projects/new") {
+    if (state.route.path === "/supervisor/projects/new") {
       renderProjectWizard();
       return;
     }
 
-    if (state.route.path === "/projects/:id") {
+    if (state.route.path === "/supervisor/projects/:id" || state.route.path === "/student/projects/:id") {
       renderProjectView(state.route.params.id, state.route.query.tab);
-      return;
-    }
-
-    if (state.route.path === "/student") {
-      renderStudentHome();
-      return;
-    }
-
-    if (state.route.path === "/finalize") {
-      Router.go("/BAchecklist.html");
       return;
     }
 

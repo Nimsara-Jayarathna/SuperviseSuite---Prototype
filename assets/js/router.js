@@ -24,13 +24,21 @@
     if (queryString) {
       queryString.split("&").forEach(function (pair) {
         var p = pair.split("=");
-        query[decodeURIComponent(p[0])] = decodeURIComponent(p[1] || "");
+        if (p[0]) {
+          query[decodeURIComponent(p[0])] = decodeURIComponent(p[1] || "");
+        }
       });
     }
 
     var route = { raw: cleanPath + (queryString ? "?" + queryString : ""), path: "/" + segments.join("/"), segments: segments, params: {}, query: query };
 
-    if (segments[0] === "projects" && segments[1] && segments[1] !== "new") {
+    // Role-prefixed project detail: /supervisor/projects/:id or /student/projects/:id
+    if ((segments[0] === "supervisor" || segments[0] === "student") && segments[1] === "projects" && segments[2] && segments[2] !== "new") {
+      route.path = "/" + segments[0] + "/projects/:id";
+      route.params.id = segments[2];
+    }
+    // Legacy project detail (fallback)
+    else if (segments[0] === "projects" && segments[1] && segments[1] !== "new") {
       route.path = "/projects/:id";
       route.params.id = segments[1];
     }
