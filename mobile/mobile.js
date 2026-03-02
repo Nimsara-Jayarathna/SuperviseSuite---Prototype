@@ -9,6 +9,20 @@
       semester: "",
       batch: ""
     },
+    projectWizard: {
+      step: 1,
+      data: {
+        title: "",
+        batch: "2026",
+        semester: "Semester 1",
+        milestoneDate: "",
+        studentIds: [],
+        githubUrl: "",
+        jiraProjectKey: "",
+        jiraBoardLink: "",
+        commsLink: ""
+      }
+    },
     projectTab: "overview",
     activityTab: "github"
   };
@@ -52,6 +66,15 @@
           query[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || "");
         }
       });
+    }
+
+    if (path === "/projects/new") {
+      return {
+        raw: raw,
+        path: "/projects/new",
+        params: {},
+        query: query
+      };
     }
 
     var match = path.match(/^\/projects\/([^/]+)$/);
@@ -131,6 +154,23 @@
     return role === "SUPERVISOR" ? "/dashboard" : "/projects";
   }
 
+  function resetProjectWizard() {
+    state.projectWizard = {
+      step: 1,
+      data: {
+        title: "",
+        batch: "2026",
+        semester: "Semester 1",
+        milestoneDate: "",
+        studentIds: [],
+        githubUrl: "",
+        jiraProjectKey: "",
+        jiraBoardLink: "",
+        commsLink: ""
+      }
+    };
+  }
+
   function statusCardClass(status) {
     var map = {
       ACTIVE: "status-active",
@@ -169,6 +209,9 @@
     }
     if (name === "plus") {
       return '<svg ' + common + '><path d="M12 5v14"/><path d="M5 12h14"/></svg>';
+    }
+    if (name === "check") {
+      return '<svg ' + common + '><path d="M6 12.5l4 4L18 8.5"/></svg>';
     }
     if (name === "chevron-right") {
       return '<svg ' + common + '><path d="M9 6l6 6-6 6"/></svg>';
@@ -250,6 +293,11 @@
     Store.touchSession();
 
     if (!isSupervisor() && (route.path === "/dashboard" || route.path === "/activity")) {
+      go("/projects");
+      return false;
+    }
+
+    if (route.path === "/projects/new" && !isSupervisor()) {
       go("/projects");
       return false;
     }
@@ -576,11 +624,208 @@
     var newProject = el("new-project-fab");
     if (newProject) {
       newProject.addEventListener("click", function () {
-        location.href = "../#/supervisor/projects/new";
+        go("/projects/new");
       });
     }
 
     bindProjectOpenButtons();
+  }
+
+  function wizardIsDirty() {
+    var data = state.projectWizard.data;
+    return !!(
+      data.title ||
+      data.milestoneDate ||
+      data.studentIds.length ||
+      data.githubUrl ||
+      data.jiraProjectKey ||
+      data.jiraBoardLink ||
+      data.commsLink ||
+      data.batch !== "2026" ||
+      data.semester !== "Semester 1"
+    );
+  }
+
+  function validateWizardStepOne() {
+    var data = state.projectWizard.data;
+    if (!data.title || !data.milestoneDate || !data.studentIds.length) {
+      toast("Please fill required fields in Step 1");
+      return false;
+    }
+    return true;
+  }
+
+  function renderProjectWizard() {
+    var data = state.projectWizard.data;
+    var step = state.projectWizard.step;
+    var allStudents = students();
+
+    appRoot.innerHTML =
+      '<div class="wizard-page">' +
+      '<header class="topbar wizard-topbar">' +
+      '<button class="btn icon-btn soft" id="wizard-exit" type="button" aria-label="Back to projects">' + icon("back") + '</button>' +
+      '<div class="wizard-topbar-title">New Project</div>' +
+      '<div class="wizard-topbar-spacer" aria-hidden="true"></div>' +
+      '</header>' +
+      '<main class="wizard-main">' +
+      '<section class="screen">' +
+      '<section class="wizard-stepper">' +
+      '<button class="wizard-step ' + (step === 1 ? "active" : "") + '" type="button" data-wizard-step="1">1 Basic</button>' +
+      '<button class="wizard-step ' + (step === 2 ? "active" : "") + '" type="button" data-wizard-step="2">2 Connections</button>' +
+      '</section>' +
+      (step === 1
+        ? (
+          '<section class="card wizard-card">' +
+          '<div class="wizard-card-head"><h3>Project Basics</h3></div>' +
+          '<div class="field"><label for="w-title">Project Title</label><input id="w-title" value="' + safe(data.title) + '" /></div>' +
+          '<div class="field"><label for="w-batch">Batch</label><input id="w-batch" value="' + safe(data.batch) + '" /></div>' +
+          '<div class="field"><label for="w-sem">Semester</label><select id="w-sem"><option ' + (data.semester === "Semester 1" ? "selected" : "") + '>Semester 1</option><option ' + (data.semester === "Semester 2" ? "selected" : "") + '>Semester 2</option></select></div>' +
+          '<div class="field"><label for="w-milestone">Next Milestone Date</label><input id="w-milestone" type="date" value="' + safe(data.milestoneDate) + '" /></div>' +
+          '</section>' +
+          '<section class="card wizard-card">' +
+          '<div class="wizard-card-head"><h3>Team Assignment</h3><span class="meta" id="wizard-selected-count">' + data.studentIds.length + ' selected</span></div>' +
+          '<div class="wizard-student-list">' +
+          allStudents.map(function (student) {
+            var selected = data.studentIds.indexOf(student.id) > -1;
+            return '<button class="wizard-student-row ' + (selected ? "is-selected" : "") + '" type="button" data-student-toggle="' + safe(student.id) + '"><span>' + safe(student.name) + '</span><span class="wizard-check">' + icon("check") + '</span></button>';
+          }).join("") +
+          '</div>' +
+          '</section>'
+        )
+        : (
+          '<section class="card wizard-card">' +
+          '<div class="wizard-card-head"><h3>Connections</h3></div>' +
+          '<div class="field"><label for="w-comms">Communication Link</label><input id="w-comms" value="' + safe(data.commsLink) + '" placeholder="https://teams.microsoft.com/..." /></div>' +
+          '<div class="field"><label for="w-gh">GitHub Repo URL</label><input id="w-gh" value="' + safe(data.githubUrl) + '" placeholder="https://github.com/org/repo" /></div>' +
+          '<div class="field"><label for="w-jira">Jira Project Key</label><input id="w-jira" value="' + safe(data.jiraProjectKey) + '" placeholder="ABC" /></div>' +
+          '<div class="field"><label for="w-jira-board">Jira Board Link</label><input id="w-jira-board" value="' + safe(data.jiraBoardLink) + '" placeholder="https://jira.example.com/boards/123" /></div>' +
+          '</section>'
+        )) +
+      '</section>' +
+      '</main>' +
+      '<div class="wizard-actionbar">' +
+      (step === 2 ? '<button class="btn ghost wizard-secondary" id="wizard-back-step" type="button">Back</button>' : "") +
+      '<button class="btn primary" id="wizard-primary" type="button">' + (step === 1 ? "Continue" : "Create Project") + '</button>' +
+      '</div>' +
+      '</div>';
+
+    el("wizard-exit").addEventListener("click", function () {
+      if (wizardIsDirty() && !window.confirm("Discard new project setup?")) {
+        return;
+      }
+      resetProjectWizard();
+      go("/projects");
+    });
+
+    document.querySelectorAll("[data-wizard-step]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var nextStep = Number(button.getAttribute("data-wizard-step"));
+        if (nextStep === step) {
+          return;
+        }
+        if (nextStep === 2) {
+          if (step === 1) {
+            data.title = el("w-title").value.trim();
+            data.batch = el("w-batch").value.trim() || "2026";
+            data.semester = el("w-sem").value.trim() || "Semester 1";
+            data.milestoneDate = el("w-milestone").value;
+          }
+          if (!validateWizardStepOne()) {
+            return;
+          }
+        }
+        state.projectWizard.step = nextStep;
+        renderProjectWizard();
+      });
+    });
+
+    if (step === 1) {
+      ["w-title", "w-batch", "w-sem", "w-milestone"].forEach(function (id) {
+        var node = el(id);
+        if (!node) {
+          return;
+        }
+        var eventName = id === "w-sem" ? "change" : "input";
+        node.addEventListener(eventName, function () {
+          data.title = el("w-title").value.trim();
+          data.batch = el("w-batch").value.trim() || "2026";
+          data.semester = el("w-sem").value.trim() || "Semester 1";
+          data.milestoneDate = el("w-milestone").value;
+        });
+      });
+
+      document.querySelectorAll("[data-student-toggle]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          var id = button.getAttribute("data-student-toggle");
+          var idx = data.studentIds.indexOf(id);
+          if (idx > -1) {
+            data.studentIds.splice(idx, 1);
+          } else {
+            data.studentIds.push(id);
+          }
+          renderProjectWizard();
+        });
+      });
+    }
+
+    if (step === 2) {
+      ["w-comms", "w-gh", "w-jira", "w-jira-board"].forEach(function (id) {
+        var node = el(id);
+        if (!node) {
+          return;
+        }
+        node.addEventListener("input", function () {
+          data.commsLink = el("w-comms").value.trim();
+          data.githubUrl = el("w-gh").value.trim();
+          data.jiraProjectKey = el("w-jira").value.trim().toUpperCase();
+          data.jiraBoardLink = el("w-jira-board").value.trim();
+        });
+      });
+    }
+
+    var backStep = el("wizard-back-step");
+    if (backStep) {
+      backStep.addEventListener("click", function () {
+        if (step === 2) {
+          data.commsLink = el("w-comms").value.trim();
+          data.githubUrl = el("w-gh").value.trim();
+          data.jiraProjectKey = el("w-jira").value.trim().toUpperCase();
+          data.jiraBoardLink = el("w-jira-board").value.trim();
+        }
+        state.projectWizard.step = 1;
+        renderProjectWizard();
+      });
+    }
+
+    el("wizard-primary").addEventListener("click", function () {
+      if (step === 1) {
+        data.title = el("w-title").value.trim();
+        data.batch = el("w-batch").value.trim() || "2026";
+        data.semester = el("w-sem").value.trim() || "Semester 1";
+        data.milestoneDate = el("w-milestone").value;
+        if (!validateWizardStepOne()) {
+          return;
+        }
+        state.projectWizard.step = 2;
+        renderProjectWizard();
+        return;
+      }
+
+      data.commsLink = el("w-comms").value.trim();
+      data.githubUrl = el("w-gh").value.trim();
+      data.jiraProjectKey = el("w-jira").value.trim().toUpperCase();
+      data.jiraBoardLink = el("w-jira-board").value.trim();
+
+      if (!data.commsLink) {
+        toast("Communication link is required");
+        return;
+      }
+
+      var created = Store.createProject(data, state.user.id);
+      toast("Project created");
+      resetProjectWizard();
+      go("/projects/" + created.id);
+    });
   }
 
   function bindProjectOpenButtons() {
@@ -957,6 +1202,11 @@
 
     if (state.route.path === "/projects") {
       renderProjects();
+      return;
+    }
+
+    if (state.route.path === "/projects/new") {
+      renderProjectWizard();
       return;
     }
 
