@@ -494,18 +494,12 @@ textarea:focus {
   gap: var(--space-3);
 }
 
-.search-shell-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
 .chip-row {
   display: flex;
   gap: var(--space-2);
   overflow-x: auto;
   padding-bottom: 2px;
+  align-items: center;
 }
 
 .chip {
@@ -719,6 +713,79 @@ textarea:focus {
   background: #fff;
   padding: var(--space-4);
   border: 1px solid var(--border);
+}
+
+.sheet-options {
+  display: grid;
+  gap: 8px;
+}
+
+.sheet-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+}
+
+.sheet-option.is-selected {
+  border-color: #bfd6e8;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.sheet-option-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #c6d2dc;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.sheet-option.is-selected .sheet-option-mark {
+  border-color: var(--primary);
+}
+
+.sheet-option.is-selected .sheet-option-mark::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.projects-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--nav-h) + 18px + env(safe-area-inset-bottom));
+  z-index: 25;
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 14px 26px rgba(15, 95, 151, 0.26);
+}
+
+.projects-fab svg {
+  width: 22px;
+  height: 22px;
+}
+
+.projects-fab:active {
+  background: var(--primary-strong);
 }
 
 .page-header-card h2 {

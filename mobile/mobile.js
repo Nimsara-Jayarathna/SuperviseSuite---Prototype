@@ -167,6 +167,9 @@
     if (name === "bell") {
       return '<svg ' + common + '><path d="M15 17H9"/><path d="M18 16V11a6 6 0 10-12 0v5l-2 2h16z"/></svg>';
     }
+    if (name === "plus") {
+      return '<svg ' + common + '><path d="M12 5v14"/><path d="M5 12h14"/></svg>';
+    }
     if (name === "chevron-right") {
       return '<svg ' + common + '><path d="M9 6l6 6-6 6"/></svg>';
     }
@@ -468,22 +471,32 @@
 
   function openFilterModal(filterKey, label, options) {
     var current = state.projectFilters[filterKey] || "";
-    var body = '<div class="stack">';
-    body += '<div class="field"><label for="filter-value">' + safe(label) + '</label><select id="filter-value">';
-    body += '<option value="">All</option>';
-    options.forEach(function (option) {
-      body += '<option value="' + safe(option) + '" ' + (current === option ? "selected" : "") + '>' + safe(option) + "</option>";
-    });
-    body += '</select></div></div>';
+    var selectedValue = current;
+    var body = '<div class="stack"><div class="sheet-options">' +
+      [''].concat(options).map(function (option) {
+        var value = option || "";
+        var selected = value === selectedValue;
+        return '<button class="sheet-option ' + (selected ? "is-selected" : "") + '" type="button" data-filter-option="' + safe(value) + '">' +
+          '<span>' + safe(option || "All") + '</span><span class="sheet-option-mark" aria-hidden="true"></span></button>';
+      }).join("") +
+      '</div></div>';
 
     UI.openModal("Filter " + label, body, '<button class="btn ghost small" id="filter-clear">Clear</button><button class="btn primary small" id="filter-apply">Apply</button>');
+    document.querySelectorAll("[data-filter-option]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        selectedValue = button.getAttribute("data-filter-option") || "";
+        document.querySelectorAll("[data-filter-option]").forEach(function (node) {
+          node.classList.toggle("is-selected", node === button);
+        });
+      });
+    });
     el("filter-clear").addEventListener("click", function () {
       state.projectFilters[filterKey] = "";
       UI.closeModal();
       renderProjects();
     });
     el("filter-apply").addEventListener("click", function () {
-      state.projectFilters[filterKey] = el("filter-value").value;
+      state.projectFilters[filterKey] = selectedValue;
       UI.closeModal();
       renderProjects();
     });
@@ -532,7 +545,6 @@
     renderShell(
       '<section class="screen">' +
       '<section class="card search-shell">' +
-      '<div class="search-shell-head">' + (isSupervisor() ? '<button class="btn primary" id="new-project-btn" type="button">+ New Project</button>' : '<span></span>') + '</div>' +
       '<input id="project-search" class="input" type="search" placeholder="Search by project or student" value="' + safe(state.projectSearch) + '" />' +
       '<div class="chip-row">' +
       '<button class="btn chip ' + (state.projectFilters.status ? "is-active" : "") + '" id="chip-status" type="button">Status' + (state.projectFilters.status ? ": " + safe(state.projectFilters.status) : "") + '</button>' +
@@ -543,6 +555,7 @@
       '<section class="stack">' +
       (projects.length ? projects.map(projectListCard).join("") : '<div class="empty">No projects match the current filters.</div>') +
       '</section>' +
+      (isSupervisor() ? '<button class="btn projects-fab" id="new-project-fab" type="button" aria-label="Create new project">' + icon("plus") + '</button>' : "") +
       '</section>'
     );
 
@@ -560,7 +573,7 @@
       openFilterModal("batch", "Batch", batches);
     });
 
-    var newProject = el("new-project-btn");
+    var newProject = el("new-project-fab");
     if (newProject) {
       newProject.addEventListener("click", function () {
         location.href = "../#/supervisor/projects/new";
@@ -862,8 +875,10 @@
   }
 
   function renderActivity() {
-    var tab = state.route.query.tab === "jira" ? "jira" : state.activityTab;
-    if (tab !== "jira") {
+    var tab = state.route.query.tab === "jira"
+      ? "jira"
+      : (state.route.query.tab === "github" ? "github" : state.activityTab);
+    if (tab !== "jira" && tab !== "github") {
       tab = "github";
     }
     state.activityTab = tab;
