@@ -267,10 +267,10 @@
       '<div class="topbar-leading">' +
       (showBack
         ? '<button class="btn icon-btn soft" id="topbar-back" type="button" aria-label="Go back">' + icon("back") + '</button>'
-        : '<span class="topbar-context">' + safe(title) + '</span>') +
+        : '<span class="topbar-spacer" aria-hidden="true"></span>') +
       '</div>' +
       '<button class="topbar-profile ' + (state.route.path === "/settings" ? "is-active" : "") + '" id="topbar-profile-trigger" type="button" aria-label="Open profile and settings">' +
-      '<div class="topbar-profile-copy"><span class="eyebrow">' + safe(title) + '</span><p class="topbar-profile-name">Hi, ' + safe(state.user.name) + '</p></div>' +
+      '<div class="topbar-profile-copy"><p class="topbar-profile-name">Hi, ' + safe(state.user.name) + '</p></div>' +
       '<span class="topbar-profile-icon">' + (state.route.path === "/settings" ? icon("chevron-down") : icon("profile")) + '</span>' +
       '</button>' +
       '</header>' +
