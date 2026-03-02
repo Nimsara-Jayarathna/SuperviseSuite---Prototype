@@ -1,6 +1,7 @@
 (function () {
   var state = {
     route: null,
+    previousRoute: null,
     user: null,
     projectSearch: "",
     projectFilters: {
@@ -130,6 +131,43 @@
     return role === "SUPERVISOR" ? "/dashboard" : "/projects";
   }
 
+  function icon(name) {
+    var common = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+    if (name === "back") {
+      return '<svg ' + common + '><path d="M15 18l-6-6 6-6"/><path d="M9 12h9"/></svg>';
+    }
+    if (name === "dashboard") {
+      return '<svg ' + common + '><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></svg>';
+    }
+    if (name === "projects") {
+      return '<svg ' + common + '><path d="M4 7a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>';
+    }
+    if (name === "activity") {
+      return '<svg ' + common + '><path d="M4 13h3l2-4 4 8 2-4h5"/><path d="M4 19h16"/></svg>';
+    }
+    if (name === "settings") {
+      return '<svg ' + common + '><circle cx="12" cy="12" r="3.25"/><path d="M19.4 15a1 1 0 00.2 1.1l.1.1a1.2 1.2 0 010 1.7l-1.1 1.1a1.2 1.2 0 01-1.7 0l-.1-.1a1 1 0 00-1.1-.2 1 1 0 00-.6.9V21a1.2 1.2 0 01-1.2 1.2h-1.6A1.2 1.2 0 0111 21v-.2a1 1 0 00-.7-.9 1 1 0 00-1.1.2l-.1.1a1.2 1.2 0 01-1.7 0L6.3 19a1.2 1.2 0 010-1.7l.1-.1a1 1 0 00.2-1.1 1 1 0 00-.9-.6H5.5A1.2 1.2 0 014.3 14v-1.6a1.2 1.2 0 011.2-1.2h.2a1 1 0 00.9-.7 1 1 0 00-.2-1.1l-.1-.1a1.2 1.2 0 010-1.7l1.1-1.1a1.2 1.2 0 011.7 0l.1.1a1 1 0 001.1.2 1 1 0 00.6-.9V3.5A1.2 1.2 0 0112.1 2.3h1.6a1.2 1.2 0 011.2 1.2v.2a1 1 0 00.7.9 1 1 0 001.1-.2l.1-.1a1.2 1.2 0 011.7 0L19.7 5a1.2 1.2 0 010 1.7l-.1.1a1 1 0 00-.2 1.1 1 1 0 00.9.6h.2a1.2 1.2 0 011.2 1.2V11a1.2 1.2 0 01-1.2 1.2h-.2a1 1 0 00-.9.7z"/></svg>';
+    }
+    if (name === "profile") {
+      return '<svg ' + common + '><circle cx="12" cy="8" r="3.25"/><path d="M5 19a7 7 0 0114 0"/></svg>';
+    }
+    if (name === "chevron-right") {
+      return '<svg ' + common + '><path d="M9 6l6 6-6 6"/></svg>';
+    }
+    if (name === "chevron-down") {
+      return '<svg ' + common + '><path d="M6 9l6 6 6-6"/></svg>';
+    }
+    return "";
+  }
+
+  function goBack(fallbackPath) {
+    if (state.previousRoute) {
+      go(state.previousRoute);
+      return;
+    }
+    go(fallbackPath || roleHome(state.user ? state.user.role : "STUDENT"));
+  }
+
   function getCurrentUser() {
     return window.Store ? Store.getCurrentUser() : null;
   }
@@ -213,33 +251,34 @@
     options = options || {};
     var title = options.title || shellTitle(state.route);
     var showBack = !!options.showBack;
-    var actions = options.actionsHtml || "";
     var navItems = isSupervisor()
       ? [
-        { path: "/dashboard", label: "Dashboard", icon: "◼" },
-        { path: "/projects", label: "Projects", icon: "▣" },
-        { path: "/activity", label: "Activity", icon: "◌" },
-        { path: "/settings", label: "Settings", icon: "◎" }
+        { path: "/dashboard", label: "Dashboard", icon: "dashboard" },
+        { path: "/projects", label: "Projects", icon: "projects" }
       ]
       : [
-        { path: "/projects", label: "Projects", icon: "▣" },
-        { path: "/settings", label: "Settings", icon: "◎" }
+        { path: "/projects", label: "Projects", icon: "projects" },
+        { path: "/settings", label: "Settings", icon: "settings" }
       ];
 
     appRoot.innerHTML =
       '<div class="mobile-shell">' +
       '<header class="topbar">' +
       '<div class="topbar-leading">' +
-      (showBack ? '<button class="btn ghost small" id="topbar-back" type="button">Back</button>' : '<span class="eyebrow">SuperviseSuite</span>') +
+      (showBack
+        ? '<button class="btn icon-btn soft" id="topbar-back" type="button" aria-label="Go back">' + icon("back") + '</button>'
+        : '<span class="topbar-context">' + safe(title) + '</span>') +
       '</div>' +
-      '<div class="topbar-title"><span class="eyebrow">' + safe(state.user.role) + '</span><h1>' + safe(title) + '</h1></div>' +
-      '<div class="topbar-actions">' + actions + '</div>' +
+      '<button class="topbar-profile ' + (state.route.path === "/settings" ? "is-active" : "") + '" id="topbar-profile-trigger" type="button" aria-label="Open profile and settings">' +
+      '<div class="topbar-profile-copy"><span class="eyebrow">' + safe(title) + '</span><p class="topbar-profile-name">Hi, ' + safe(state.user.name) + '</p></div>' +
+      '<span class="topbar-profile-icon">' + (state.route.path === "/settings" ? icon("chevron-down") : icon("profile")) + '</span>' +
+      '</button>' +
       '</header>' +
       '<main class="app-main">' + contentHtml + "</main>" +
-      '<nav class="nav-bottom ' + (!isSupervisor() ? "compact" : "") + '">' +
+      '<nav class="nav-bottom">' +
       navItems.map(function (item) {
         var active = state.route.path === item.path || (item.path === "/projects" && state.route.path === "/projects/:id");
-        return '<a class="nav-link ' + (active ? "active" : "") + '" href="#' + item.path + '"><span class="nav-icon">' + safe(item.icon) + '</span><span>' + safe(item.label) + "</span></a>";
+        return '<a class="nav-link ' + (active ? "active" : "") + '" href="#' + item.path + '"><span class="nav-icon">' + icon(item.icon) + '</span><span class="nav-label">' + safe(item.label) + "</span></a>";
       }).join("") +
       "</nav>" +
       "</div>";
@@ -247,11 +286,16 @@
     var back = el("topbar-back");
     if (back) {
       back.addEventListener("click", function () {
-        if (state.route.path === "/projects/:id") {
-          go("/projects");
-          return;
+        goBack(state.route.path === "/projects/:id" ? "/projects" : roleHome(state.user.role));
+      });
+    }
+
+    var profileTrigger = el("topbar-profile-trigger");
+    if (profileTrigger) {
+      profileTrigger.addEventListener("click", function () {
+        if (state.route.path !== "/settings") {
+          go("/settings");
         }
-        go(roleHome(state.user.role));
       });
     }
   }
@@ -337,6 +381,7 @@
 
     renderShell(
       '<section class="screen">' +
+      '<section class="card page-header-card"><h2>Dashboard</h2><p class="section-copy">A reduced mobile overview of the supervisor portfolio.</p></section>' +
       '<div class="stats-grid">' +
       dashboardStatCard("Active", stats.onTrack) +
       dashboardStatCard("At Risk", stats.atRisk) +
@@ -347,6 +392,7 @@
       activitySummary.map(function (item) {
         return '<div class="list-card">' + safe(item) + "</div>";
       }).join("") +
+      '<button class="btn block cta-card-button" type="button" id="open-activity-cta"><span>Open Activity</span><span>' + icon("chevron-right") + '</span></button>' +
       '</div></section>' +
       '<section class="card"><div class="section-head"><div><h2>Priority Projects</h2><p class="section-copy">Quick access to the active portfolio.</p></div><button class="btn text" type="button" id="see-all-projects">See all</button></div><div class="stack">' +
       (visible.length ? visible.map(dashboardProjectCard).join("") : '<div class="empty">No projects available.</div>') +
@@ -358,6 +404,12 @@
     if (seeAll) {
       seeAll.addEventListener("click", function () {
         go("/projects");
+      });
+    }
+    var openActivity = el("open-activity-cta");
+    if (openActivity) {
+      openActivity.addEventListener("click", function () {
+        go("/activity");
       });
     }
     bindProjectOpenButtons();
@@ -428,6 +480,7 @@
 
     renderShell(
       '<section class="screen">' +
+      '<section class="card page-header-card"><h2>Projects</h2><p class="section-copy">Search and filter your assigned work without the desktop tables.</p></section>' +
       '<section class="card search-shell">' +
       '<input id="project-search" class="input" type="search" placeholder="Search by project or student" value="' + safe(state.projectSearch) + '" />' +
       '<div class="chip-row">' +
@@ -761,6 +814,7 @@
 
     renderShell(
       '<section class="screen">' +
+      '<section class="card page-header-card"><h2>Activity</h2><p class="section-copy">Supervisor-level GitHub and Jira snapshots across visible projects.</p></section>' +
       '<section class="segmented">' +
       '<button class="btn ' + (tab === "github" ? "active" : "") + '" type="button" data-activity-tab="github">GitHub</button>' +
       '<button class="btn ' + (tab === "jira" ? "active" : "") + '" type="button" data-activity-tab="jira">Jira</button>' +
@@ -791,6 +845,7 @@
   function renderSettings() {
     renderShell(
       '<section class="screen">' +
+      '<section class="card page-header-card"><h2>Settings</h2><p class="section-copy">Profile access stays available from the top bar on every screen.</p></section>' +
       '<section class="card"><div class="section-head"><div><h2>Profile</h2><p class="section-copy">Session and role details reused from the desktop prototype.</p></div></div>' +
       '<div class="meta-grid">' +
       '<div class="meta-item"><span class="meta-label">Name</span><span>' + safe(state.user.name) + '</span></div>' +
@@ -799,7 +854,8 @@
       '<div class="meta-item"><span class="meta-label">Projects</span><span>' + visibleProjects().length + '</span></div>' +
       '</div></section>' +
       '<section class="card"><div class="stack"><button class="btn primary block" id="logout-btn" type="button">Logout</button></div></section>' +
-      '</section>'
+      '</section>',
+      { showBack: true }
     );
 
     el("logout-btn").addEventListener("click", function () {
@@ -811,6 +867,7 @@
   }
 
   function renderCurrentRoute() {
+    state.previousRoute = state.route ? state.route.raw : state.previousRoute;
     state.route = parseRoute();
     if (!guardRoute(state.route)) {
       return;
