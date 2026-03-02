@@ -68,6 +68,15 @@
       });
     }
 
+    if (path === "/register") {
+      return {
+        raw: raw,
+        path: "/register",
+        params: {},
+        query: query
+      };
+    }
+
     if (path === "/projects/new") {
       return {
         raw: raw,
@@ -276,12 +285,24 @@
     var user = getCurrentUser();
     state.user = user;
 
-    if (!user && route.path !== "/login") {
+    if (!user && route.path !== "/login" && route.path !== "/register") {
       go("/login");
       return false;
     }
 
     if (user && route.path === "/login") {
+      go(roleHome(user.role));
+      return false;
+    }
+
+    if (user && route.path === "/register") {
+      if (user.role === "SUPERVISOR") {
+        Store.clearSession();
+        state.user = null;
+        toast("Supervisor accounts are created by admins.");
+        go("/login");
+        return false;
+      }
       go(roleHome(user.role));
       return false;
     }
@@ -326,6 +347,9 @@
     }
     if (route.path === "/projects") {
       return "Projects";
+    }
+    if (route.path === "/register") {
+      return "Create Account";
     }
     if (route.path === "/projects/:id") {
       var project = Store.getProjectById(route.params.id);
@@ -420,6 +444,7 @@
       '<div class="field"><label for="login-password">Password</label><input id="login-password" type="password" value="demo123" autocomplete="current-password" /></div>' +
       '<div class="field-error" id="login-error"></div>' +
       '<button class="btn primary block" id="login-submit" type="button">Login</button>' +
+      '<button class="auth-link" id="open-register" type="button">New here? Create a student account</button>' +
       '<p class="meta">All demo accounts use <strong>demo123</strong>.</p>' +
       '</div>' +
       '</main>' +
@@ -444,6 +469,94 @@
       state.user = Store.getCurrentUser();
       toast("Login successful");
       go(roleHome(session.role));
+    });
+
+    el("open-register").addEventListener("click", function () {
+      go("/register");
+    });
+  }
+
+  function renderRegister() {
+    appRoot.innerHTML =
+      '<div class="wizard-page">' +
+      '<header class="topbar wizard-topbar">' +
+      '<button class="btn icon-btn soft" id="register-back" type="button" aria-label="Back to login">' + icon("back") + '</button>' +
+      '<div class="wizard-topbar-title">Create account</div>' +
+      '<div class="wizard-topbar-spacer" aria-hidden="true"></div>' +
+      '</header>' +
+      '<main class="wizard-main">' +
+      '<section class="screen">' +
+      '<section class="card login-card auth-card">' +
+      '<div class="stack">' +
+      '<div class="field"><label for="register-name">Full Name</label><input id="register-name" type="text" autocomplete="name" /></div>' +
+      '<div class="field"><label for="register-email">Email</label><input id="register-email" type="email" autocomplete="email" /></div>' +
+      '<div class="field"><label for="register-password">Password</label><input id="register-password" type="password" autocomplete="new-password" /></div>' +
+      '<div class="field"><label for="register-confirm">Confirm Password</label><input id="register-confirm" type="password" autocomplete="new-password" /></div>' +
+      '<div class="field-error" id="register-error"></div>' +
+      '<button class="btn primary block" id="register-submit" type="button">Create account</button>' +
+      '<button class="auth-link" id="return-login" type="button">Already have an account? Login</button>' +
+      '</div>' +
+      '</section>' +
+      '</section>' +
+      '</main>' +
+      '</div>';
+
+    function goToLogin() {
+      go("/login");
+    }
+
+    function showError(message) {
+      el("register-error").textContent = message;
+      if (message) {
+        toast(message);
+      }
+    }
+
+    el("register-back").addEventListener("click", goToLogin);
+    el("return-login").addEventListener("click", goToLogin);
+
+    el("register-submit").addEventListener("click", function () {
+      var fullName = el("register-name").value.trim();
+      var email = el("register-email").value.trim();
+      var password = el("register-password").value;
+      var confirmPassword = el("register-confirm").value;
+      var emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+      el("register-error").textContent = "";
+
+      if (!fullName || !email || !password || !confirmPassword) {
+        showError("All fields are required.");
+        return;
+      }
+      if (!emailOk) {
+        showError("Enter a valid email address.");
+        return;
+      }
+      if (password.length < 6) {
+        showError("Password must be at least 6 characters.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        showError("Passwords do not match.");
+        return;
+      }
+
+      var result = Store.registerUser({
+        fullName: fullName,
+        email: email,
+        password: password,
+        role: "STUDENT"
+      });
+
+      if (!result.ok) {
+        showError(result.error || "Unable to create account.");
+        return;
+      }
+
+      Store.login(email, password);
+      state.user = Store.getCurrentUser();
+      toast("Account created");
+      go("/projects");
     });
   }
 
@@ -1192,6 +1305,11 @@
 
     if (state.route.path === "/login") {
       renderLogin();
+      return;
+    }
+
+    if (state.route.path === "/register") {
+      renderRegister();
       return;
     }
 
