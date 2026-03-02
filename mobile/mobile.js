@@ -131,6 +131,19 @@
     return role === "SUPERVISOR" ? "/dashboard" : "/projects";
   }
 
+  function statusCardClass(status) {
+    var map = {
+      ACTIVE: "status-active",
+      AT_RISK: "status-at-risk",
+      BEHIND: "status-behind",
+      COMPLETED: "status-completed",
+      ARCHIVED: "status-archived",
+      DRAFT: "status-draft",
+      CANCELLED: "status-cancelled"
+    };
+    return map[status] || "status-draft";
+  }
+
   function icon(name) {
     var common = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
     if (name === "back") {
@@ -150,6 +163,9 @@
     }
     if (name === "profile") {
       return '<svg ' + common + '><circle cx="12" cy="8" r="3.25"/><path d="M5 19a7 7 0 0114 0"/></svg>';
+    }
+    if (name === "bell") {
+      return '<svg ' + common + '><path d="M15 17H9"/><path d="M18 16V11a6 6 0 10-12 0v5l-2 2h16z"/></svg>';
     }
     if (name === "chevron-right") {
       return '<svg ' + common + '><path d="M9 6l6 6-6 6"/></svg>';
@@ -182,6 +198,32 @@
 
   function students() {
     return Store.listStudents();
+  }
+
+  function openActivityForBell() {
+    if (!state.user) {
+      go("/login");
+      return;
+    }
+    go("/activity");
+  }
+
+  function notificationCount() {
+    if (!state.user) {
+      return 0;
+    }
+
+    if (isSupervisor()) {
+      return visibleProjects().reduce(function (sum, project) {
+        return sum + Store.listActionItems(project.id).filter(function (item) {
+          return item.status !== "Done";
+        }).length;
+      }, 0);
+    }
+
+    return Store.listMyActionItems(state.user.id).filter(function (item) {
+      return item.status !== "Done";
+    }).length;
   }
 
   function guardRoute(route) {
@@ -251,6 +293,7 @@
     options = options || {};
     var title = options.title || shellTitle(state.route);
     var showBack = !!options.showBack;
+    var bellCount = notificationCount();
     var navItems = isSupervisor()
       ? [
         { path: "/dashboard", label: "Dashboard", icon: "dashboard" },
@@ -267,12 +310,12 @@
       '<div class="topbar-leading">' +
       (showBack
         ? '<button class="btn icon-btn soft" id="topbar-back" type="button" aria-label="Go back">' + icon("back") + '</button>'
-        : '<span class="topbar-spacer" aria-hidden="true"></span>') +
+        : '<button class="topbar-profile-trigger" id="topbar-profile-trigger" type="button" aria-label="Open profile and settings">' + icon("profile") + '</button>') +
       '</div>' +
-      '<button class="topbar-profile ' + (state.route.path === "/settings" ? "is-active" : "") + '" id="topbar-profile-trigger" type="button" aria-label="Open profile and settings">' +
-      '<div class="topbar-profile-copy"><p class="topbar-profile-name">Hi, ' + safe(state.user.name) + '</p></div>' +
-      '<span class="topbar-profile-icon">' + (state.route.path === "/settings" ? icon("chevron-down") : icon("profile")) + '</span>' +
+      '<button class="topbar-title-button" id="topbar-title-trigger" type="button" aria-label="Open profile and settings">' +
+      '<div class="topbar-title-copy"><span class="eyebrow">' + safe(title) + '</span><p class="topbar-profile-name">Hi, ' + safe(state.user.name) + '</p></div>' +
       '</button>' +
+      '<div class="topbar-actions"><button class="btn icon-btn soft" id="topbar-bell" type="button" aria-label="Open action items"><span class="icon-badge-wrap">' + icon("bell") + (bellCount > 0 ? '<span class="icon-badge">' + Math.min(bellCount, 99) + '</span>' : "") + '</span></button></div>' +
       '</header>' +
       '<main class="app-main">' + contentHtml + "</main>" +
       '<nav class="nav-bottom">' +
@@ -290,12 +333,22 @@
       });
     }
 
-    var profileTrigger = el("topbar-profile-trigger");
-    if (profileTrigger) {
-      profileTrigger.addEventListener("click", function () {
+    ["topbar-profile-trigger", "topbar-title-trigger"].forEach(function (id) {
+      var trigger = el(id);
+      if (!trigger) {
+        return;
+      }
+      trigger.addEventListener("click", function () {
         if (state.route.path !== "/settings") {
           go("/settings");
         }
+      });
+    });
+
+    var bell = el("topbar-bell");
+    if (bell) {
+      bell.addEventListener("click", function () {
+        openActivityForBell();
       });
     }
   }
@@ -353,7 +406,7 @@
 
   function dashboardProjectCard(project) {
     var summary = Store.getProjectSummary(project.id) || { openActionItems: 0, overdueCount: 0, meetingCount: 0 };
-    return '<article class="project-card">' +
+    return '<article class="project-card ' + statusCardClass(project.lifecycleStatus) + '">' +
       '<div class="project-card-head">' +
       '<div><h3>' + safe(project.title) + '</h3><p class="meta">Milestone: ' + safe(milestoneText(project)) + '</p></div>' +
       lifecycleBadge(project.lifecycleStatus) +
@@ -380,7 +433,6 @@
 
     renderShell(
       '<section class="screen">' +
-      '<section class="card page-header-card"><h2>Dashboard</h2></section>' +
       '<div class="stats-grid">' +
       dashboardStatCard("Active", stats.onTrack) +
       dashboardStatCard("At Risk", stats.atRisk) +
@@ -459,7 +511,7 @@
       return student ? student.name : studentId;
     }).join(", ");
 
-    return '<article class="project-card" data-open-project="' + safe(project.id) + '" role="button" tabindex="0">' +
+    return '<article class="project-card ' + statusCardClass(project.lifecycleStatus) + '" data-open-project="' + safe(project.id) + '" role="button" tabindex="0">' +
       '<div class="project-card-head"><div><h3>' + safe(project.title) + '</h3><p class="meta">' + safe(memberNames || "No members") + '</p></div>' + lifecycleBadge(project.lifecycleStatus) + '</div>' +
       '<div class="meta-grid">' +
       '<div class="meta-item"><span class="meta-label">Batch</span><span>' + safe(project.batch || "-") + '</span></div>' +
@@ -479,8 +531,8 @@
 
     renderShell(
       '<section class="screen">' +
-      '<section class="card page-header-card"><h2>Projects</h2></section>' +
       '<section class="card search-shell">' +
+      '<div class="search-shell-head">' + (isSupervisor() ? '<button class="btn primary" id="new-project-btn" type="button">+ New Project</button>' : '<span></span>') + '</div>' +
       '<input id="project-search" class="input" type="search" placeholder="Search by project or student" value="' + safe(state.projectSearch) + '" />' +
       '<div class="chip-row">' +
       '<button class="btn chip ' + (state.projectFilters.status ? "is-active" : "") + '" id="chip-status" type="button">Status' + (state.projectFilters.status ? ": " + safe(state.projectFilters.status) : "") + '</button>' +
@@ -507,6 +559,13 @@
     el("chip-batch").addEventListener("click", function () {
       openFilterModal("batch", "Batch", batches);
     });
+
+    var newProject = el("new-project-btn");
+    if (newProject) {
+      newProject.addEventListener("click", function () {
+        location.href = "../#/supervisor/projects/new";
+      });
+    }
 
     bindProjectOpenButtons();
   }
@@ -814,7 +873,6 @@
 
     renderShell(
       '<section class="screen">' +
-      '<section class="card page-header-card"><h2>Activity</h2></section>' +
       '<section class="segmented">' +
       '<button class="btn ' + (tab === "github" ? "active" : "") + '" type="button" data-activity-tab="github">GitHub</button>' +
       '<button class="btn ' + (tab === "jira" ? "active" : "") + '" type="button" data-activity-tab="jira">Jira</button>' +
@@ -845,7 +903,6 @@
   function renderSettings() {
     renderShell(
       '<section class="screen">' +
-      '<section class="card page-header-card"><h2>Settings</h2></section>' +
       '<section class="card"><div class="section-head"><div><h2>Profile</h2></div></div>' +
       '<div class="meta-grid">' +
       '<div class="meta-item"><span class="meta-label">Name</span><span>' + safe(state.user.name) + '</span></div>' +
