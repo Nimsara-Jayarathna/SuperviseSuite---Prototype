@@ -306,7 +306,6 @@
       '<main class="card login-card">' +
       '<span class="eyebrow">SuperviseSuite</span>' +
       '<h1>Mobile Access</h1>' +
-      '<p class="section-copy">Uses the same seeded accounts and session storage as the desktop prototype.</p>' +
       '<div class="stack" style="margin-top:16px">' +
       '<div class="inline-actions">' +
       '<button class="btn small" type="button" data-demo="supervisor@demo.com">Supervisor Demo</button>' +
@@ -381,20 +380,20 @@
 
     renderShell(
       '<section class="screen">' +
-      '<section class="card page-header-card"><h2>Dashboard</h2><p class="section-copy">A reduced mobile overview of the supervisor portfolio.</p></section>' +
+      '<section class="card page-header-card"><h2>Dashboard</h2></section>' +
       '<div class="stats-grid">' +
       dashboardStatCard("Active", stats.onTrack) +
       dashboardStatCard("At Risk", stats.atRisk) +
       dashboardStatCard("Overdue", stats.overdue) +
       dashboardStatCard("Completed", projects.filter(function (p) { return p.lifecycleStatus === "COMPLETED"; }).length) +
       '</div>' +
-      '<section class="card card-muted"><div class="section-head"><div><h2>Activity Summary</h2><p class="section-copy">Mobile view replaces desktop charts with quick counts.</p></div></div><div class="stack">' +
+      '<section class="card card-muted"><div class="section-head"><div><h2>Activity Summary</h2></div></div><div class="stack">' +
       activitySummary.map(function (item) {
         return '<div class="list-card">' + safe(item) + "</div>";
       }).join("") +
       '<button class="btn block cta-card-button" type="button" id="open-activity-cta"><span>Open Activity</span><span>' + icon("chevron-right") + '</span></button>' +
       '</div></section>' +
-      '<section class="card"><div class="section-head"><div><h2>Priority Projects</h2><p class="section-copy">Quick access to the active portfolio.</p></div><button class="btn text" type="button" id="see-all-projects">See all</button></div><div class="stack">' +
+      '<section class="card"><div class="section-head"><div><h2>Priority Projects</h2></div><button class="btn text" type="button" id="see-all-projects">See all</button></div><div class="stack">' +
       (visible.length ? visible.map(dashboardProjectCard).join("") : '<div class="empty">No projects available.</div>') +
       '</div></section>' +
       '</section>'
@@ -480,7 +479,7 @@
 
     renderShell(
       '<section class="screen">' +
-      '<section class="card page-header-card"><h2>Projects</h2><p class="section-copy">Search and filter your assigned work without the desktop tables.</p></section>' +
+      '<section class="card page-header-card"><h2>Projects</h2></section>' +
       '<section class="card search-shell">' +
       '<input id="project-search" class="input" type="search" placeholder="Search by project or student" value="' + safe(state.projectSearch) + '" />' +
       '<div class="chip-row">' +
@@ -595,7 +594,8 @@
       tabContent =
         '<div class="project-tab-content">' +
         '<div class="card card-muted">' +
-        '<div class="section-head"><div><h3>Project Snapshot</h3><p class="section-copy">' + safe(project.batch || "-") + " · " + safe(project.semester || "-") + '</p></div></div>' +
+        '<div class="section-head"><div><h3>Project Snapshot</h3></div></div>' +
+        '<p class="meta">' + safe(project.batch || "-") + " · " + safe(project.semester || "-") + '</p>' +
         '<div class="meta-grid">' +
         '<div class="meta-item"><span class="meta-label">Milestone</span><span>' + safe(milestoneText(project)) + '</span></div>' +
         '<div class="meta-item"><span class="meta-label">Open / Overdue</span><span>' + summary.openActionItems + " / " + summary.overdueCount + '</span></div>' +
@@ -603,7 +603,7 @@
         '<div class="meta-item"><span class="meta-label">Last Activity</span><span>' + safe(formatDateTime(project.analytics.lastActivityAt)) + '</span></div>' +
         '</div>' +
         '</div>' +
-        '<div class="card"><div class="section-head"><div><h3>Members</h3><p class="section-copy">Assigned students for this project.</p></div></div><div class="inline-actions">' +
+        '<div class="card"><div class="section-head"><div><h3>Members</h3></div></div><div class="inline-actions">' +
         projectStudents.map(function (student) {
           return '<span class="badge info">' + safe(student.name) + '</span>';
         }).join("") +
@@ -615,7 +615,7 @@
         '<div class="list-card"><strong>Communication</strong><p class="meta">' + safe(project.commsIntegration.status) + (project.commsLink ? " · " + safe(project.commsLink) : "") + '</p></div>' +
         '</div></div>' +
         (isSupervisor()
-          ? '<div class="card"><div class="section-head"><div><h3>Lifecycle Control</h3><p class="section-copy">Students cannot change lifecycle state.</p></div></div><div class="stack"><select id="project-status-next">' +
+          ? '<div class="card"><div class="section-head"><div><h3>Lifecycle Control</h3></div></div><div class="stack"><select id="project-status-next">' +
             ["DRAFT", "ACTIVE", "AT_RISK", "BEHIND", "COMPLETED", "ARCHIVED", "CANCELLED"].map(function (status) {
               return '<option ' + (project.lifecycleStatus === status ? "selected" : "") + ">" + status + "</option>";
             }).join("") +
@@ -631,7 +631,7 @@
       }).join("");
       tabContent =
         '<div class="project-tab-content">' +
-        '<div class="card"><div class="section-head"><div><h3>GitHub</h3><p class="section-copy">Aggregate activity available in the current store.</p></div></div>' +
+        '<div class="card"><div class="section-head"><div><h3>GitHub</h3></div></div>' +
         '<div class="stack">' +
         '<div class="list-card"><strong>Commits This Week</strong><p class="meta">' + project.analytics.commitsWeek + '</p></div>' +
         '<div class="list-card"><strong>Last Synced Activity</strong><p class="meta">' + safe(formatDateTime(project.analytics.lastActivityAt)) + '</p></div>' +
@@ -814,7 +814,7 @@
 
     renderShell(
       '<section class="screen">' +
-      '<section class="card page-header-card"><h2>Activity</h2><p class="section-copy">Supervisor-level GitHub and Jira snapshots across visible projects.</p></section>' +
+      '<section class="card page-header-card"><h2>Activity</h2></section>' +
       '<section class="segmented">' +
       '<button class="btn ' + (tab === "github" ? "active" : "") + '" type="button" data-activity-tab="github">GitHub</button>' +
       '<button class="btn ' + (tab === "jira" ? "active" : "") + '" type="button" data-activity-tab="jira">Jira</button>' +
@@ -845,8 +845,8 @@
   function renderSettings() {
     renderShell(
       '<section class="screen">' +
-      '<section class="card page-header-card"><h2>Settings</h2><p class="section-copy">Profile access stays available from the top bar on every screen.</p></section>' +
-      '<section class="card"><div class="section-head"><div><h2>Profile</h2><p class="section-copy">Session and role details reused from the desktop prototype.</p></div></div>' +
+      '<section class="card page-header-card"><h2>Settings</h2></section>' +
+      '<section class="card"><div class="section-head"><div><h2>Profile</h2></div></div>' +
       '<div class="meta-grid">' +
       '<div class="meta-item"><span class="meta-label">Name</span><span>' + safe(state.user.name) + '</span></div>' +
       '<div class="meta-item"><span class="meta-label">Role</span><span>' + safe(state.user.role) + '</span></div>' +
