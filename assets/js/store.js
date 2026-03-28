@@ -225,6 +225,7 @@
   function normalizeProject(project, db) {
     project.title = project.title || "Untitled Project";
     project.studentIds = safeArray(project.studentIds);
+    project.leaderStudentId = project.leaderStudentId || null;
     project.lifecycleStatus = legacyToLifecycleStatus(project.lifecycleStatus || project.status);
     project.createdAt = project.createdAt || nowIso();
     project.createdBy = project.createdBy || null;
@@ -250,6 +251,35 @@
       project.analytics.contributions = project.studentIds.map(function (sid) {
         return { userId: sid, commits: 0, prs: 0 };
       });
+    }
+
+    var normalizedMilestones = safeArray(project.milestones).map(function (m, idx) {
+      return {
+        id: m.id || ("m_" + project.id + "_" + (idx + 1)),
+        title: m.title || ("Milestone " + (idx + 1)),
+        description: m.description || "",
+        dueDate: m.dueDate || project.milestoneDate || todayIsoDate(),
+        status: m.status || "PLANNED",
+        sequenceNo: typeof m.sequenceNo === "number" ? m.sequenceNo : (idx + 1)
+      };
+    });
+
+    if (!normalizedMilestones.length && project.milestoneDate) {
+      normalizedMilestones = [{
+        id: "m_" + project.id + "_1",
+        title: "Initial milestone",
+        description: "",
+        dueDate: project.milestoneDate,
+        status: "PLANNED",
+        sequenceNo: 1
+      }];
+    }
+
+    project.milestones = normalizedMilestones;
+    if ((!project.milestoneDate || String(project.milestoneDate).trim() === "") && project.milestones.length) {
+      project.milestoneDate = project.milestones
+        .map(function (m) { return m.dueDate; })
+        .sort()[0];
     }
 
     ensureIntegrationModel(project);
@@ -832,13 +862,29 @@
 
   function createProject(payload, userId) {
     var db = init();
+    var milestones = safeArray(payload.milestones).map(function (m, idx) {
+      return {
+        id: "m_" + Date.now() + "_" + (idx + 1),
+        title: String(m.title || "").trim() || ("Milestone " + (idx + 1)),
+        description: String(m.description || "").trim(),
+        dueDate: m.dueDate,
+        status: "PLANNED",
+        sequenceNo: idx + 1
+      };
+    });
+    var earliestMilestoneDate = milestones.length
+      ? milestones.map(function (m) { return m.dueDate; }).sort()[0]
+      : payload.milestoneDate;
+
     var p = {
       id: "p_" + Date.now(),
       title: payload.title,
       batch: payload.batch,
       semester: payload.semester,
-      milestoneDate: payload.milestoneDate,
+      milestoneDate: earliestMilestoneDate,
+      milestones: milestones,
       studentIds: safeArray(payload.studentIds),
+      leaderStudentId: payload.leaderStudentId || null,
       lifecycleStatus: "DRAFT",
       status: "On track",
       githubUrl: payload.githubUrl || "",

@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jira Integration Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Smooth transitions for tabs */
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-[#F8FAFC] p-8 font-sans text-gray-900">
+
+  <div class="max-w-5xl mx-auto">
+    <!-- Main Dashboard Card -->
+    <div class="bg-[#FDFDFD] border border-gray-200 rounded-2xl p-8 shadow-sm">
+      
+      <!-- Navigation Tabs -->
+      <div class="flex border-b border-gray-200 mb-6 space-x-6 px-2" id="tabs">
+        <button onclick="switchTab('overview')" id="tab-overview" class="tab-btn pb-3 text-sm font-medium capitalize border-b-2 border-black text-black">overview</button>
+        <button onclick="switchTab('team')" id="tab-team" class="tab-btn pb-3 text-sm font-medium capitalize text-gray-500 hover:text-gray-700">team</button>
+        <button onclick="switchTab('milestones')" id="tab-milestones" class="tab-btn pb-3 text-sm font-medium capitalize text-gray-500 hover:text-gray-700">milestones</button>
+        <button onclick="switchTab('github')" id="tab-github" class="tab-btn pb-3 text-sm font-medium capitalize text-gray-500 hover:text-gray-700">github</button>
+        <button onclick="switchTab('jira')" id="tab-jira" class="tab-btn pb-3 text-sm font-medium capitalize text-blue-500 hover:text-blue-700">jira <span id="jira-sparkle">✨</span></button>
+      </div>
+
+      <!-- ==================== OVERVIEW TAB ==================== -->
+      <div id="content-overview" class="tab-content active space-y-6">
+        <h2 class="text-xl font-semibold">Project details</h2>
+        
+        <div class="border border-gray-200 p-6 rounded-xl flex justify-between items-center bg-white">
+          <div>
+            <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Batch</p>
+            <p class="font-semibold mt-1">2026</p>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Semester</p>
+            <p class="font-semibold mt-1">Semester 1</p>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Project Leader</p>
+            <div class="flex items-center gap-2 mt-1">
+              <div class="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold">N</div>
+              <p class="font-semibold">Nimsara Jayarathna</p>
+            </div>
+          </div>
+        </div>
+
+        <h3 class="text-lg font-semibold mt-8 mb-4">Integrations</h3>
+        
+        <!-- Unlinked State -->
+        <div id="unlinked-state" class="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center justify-center bg-gray-50 text-center">
+          <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center text-2xl mb-4">📊</div>
+          <h4 class="font-semibold text-gray-900">Connect Jira Workspace</h4>
+          <p class="text-sm text-gray-500 mt-2 max-w-sm mb-6">
+            Link your team's Jira project to automatically track sprint adherence, scrum health, and student contributions.
+          </p>
+          <button id="link-btn" onclick="handleLinkJira()" class="bg-black text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">
+            Link Jira Project
+          </button>
+        </div>
+
+        <!-- Linked State (Hidden by default) -->
+        <div id="linked-state" class="hidden border border-gray-200 rounded-xl p-4 bg-white shadow-sm space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <div class="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center text-xl">📊</div>
+              <div>
+                <p class="text-xs text-gray-500 font-medium tracking-wide">LINKED JIRA PROJECT</p>
+                <p class="font-semibold text-gray-900" id="jira-project-name">Sustain-Insight (SUS)</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-4">
+              <span class="flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full border border-green-200">
+                <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                Healthy Sync
+              </span>
+              <button onclick="handleUnlinkJira()" class="text-sm text-red-500 font-medium hover:underline">Unlink</button>
+            </div>
+          </div>
+          <div id="overview-jira-analytics" class="hidden border border-gray-200 bg-gray-50 rounded-xl p-4"></div>
+        </div>
+      </div>
+
+      <!-- ==================== JIRA TAB ==================== -->
+      <div id="content-jira" class="tab-content space-y-6">
+        
+        <!-- Jira Empty State -->
+        <div id="jira-empty-state" class="py-20 text-center">
+          <p class="text-gray-500 mb-4">No Jira project linked yet.</p>
+          <button onclick="switchTab('overview')" class="text-blue-600 font-medium hover:underline">
+            Go to Overview to link a project
+          </button>
+        </div>
+
+        <!-- Jira Analytics Dashboard (Hidden by default) -->
+        <div id="jira-analytics-state" class="hidden space-y-6">
+          
+          <!-- Code display banner (For demo purposes to show it worked) -->
+          <div id="demo-auth-banner" class="hidden bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg text-sm flex justify-between items-center mb-6">
+            <div><strong>Success!</strong> Successfully authorized via Atlassian OAuth.</div>
+            <code id="demo-code-display" class="bg-green-100 px-2 py-1 rounded text-xs"></code>
+          </div>
+
+          <div class="flex justify-between items-center">
+            <div>
+              <h2 class="text-xl font-semibold">Project Analytics Overview</h2>
+              <p class="text-sm text-gray-500">Total project health first, then sprint-level drill down</p>
+            </div>
+            <div>
+              <select id="sprint-selector" onchange="handleSprintSelection(this.value)" class="border border-gray-300 bg-white rounded-lg px-3 py-2 text-sm font-medium shadow-sm outline-none hidden"></select>
+            </div>
+          </div>
+
+          <div id="jira-loading-state" class="hidden border border-gray-200 rounded-xl p-8 bg-white text-center">
+            <div class="mx-auto w-8 h-8 border-4 border-gray-200 border-t-black rounded-full animate-spin"></div>
+            <p class="text-sm text-gray-500 mt-4">Loading live Jira data...</p>
+          </div>
+
+          <div id="jira-error-state" class="hidden border border-red-200 bg-red-50 rounded-xl p-4 text-sm text-red-700"></div>
+
+          <div class="border-b border-gray-200">
+            <div class="flex gap-6 px-1">
+              <button id="jira-subtab-sprint" onclick="switchJiraViewTab('sprint')" class="py-2 text-sm font-medium border-b-2 border-black text-black">Sprint Level</button>
+              <button id="jira-subtab-epic" onclick="switchJiraViewTab('epic')" class="py-2 text-sm font-medium text-gray-500 hover:text-gray-700">Epic Level</button>
+            </div>
+          </div>
+
+          <div id="jira-sprint-view" class="space-y-6">
+            <div id="jira-insight-headline" class="border border-blue-200 bg-blue-50 rounded-xl p-4 text-sm text-blue-800 hidden"></div>
+            <div id="story-analysis-card" class="border border-gray-200 bg-white rounded-xl p-4 hidden"></div>
+            <div id="jira-metrics-grid" class="grid grid-cols-1 md:grid-cols-4 gap-4 hidden">
+              <div class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
+                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Active Sprint</p>
+                <p id="metric-sprint-name" class="text-sm font-semibold mt-2">-</p>
+              </div>
+              <div class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
+                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Completion</p>
+                <p id="metric-completion" class="text-2xl font-bold mt-2">-</p>
+              </div>
+              <div class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
+                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Done Issues</p>
+                <p id="metric-done" class="text-2xl font-bold mt-2">-</p>
+              </div>
+              <div class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
+                <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Story Points</p>
+                <p id="metric-points" class="text-2xl font-bold mt-2">-</p>
+              </div>
+            </div>
+            <div id="sprints-container" class="border border-gray-200 rounded-xl bg-white shadow-sm hidden"></div>
+            <div id="team-workload-container" class="border border-gray-200 rounded-xl bg-white shadow-sm hidden"></div>
+            <div id="issues-container" class="border border-gray-200 rounded-xl bg-white shadow-sm"></div>
+          </div>
+
+          <div id="jira-epic-view" class="space-y-6 hidden">
+            <div class="border border-gray-200 rounded-xl bg-white shadow-sm p-4 hidden" id="hierarchy-controls">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <h3 class="font-semibold text-sm">Epic Hierarchy View</h3>
+                  <p class="text-xs text-gray-500 mt-1">Epic → Story/Task → Subtask mapping for selected sprint</p>
+                </div>
+                <select id="epic-filter-selector" onchange="handleEpicFilter(this.value)" class="border border-gray-300 bg-white rounded-lg px-3 py-2 text-sm font-medium shadow-sm outline-none"></select>
+              </div>
+            </div>
+            <div id="epic-hierarchy-container" class="border border-gray-200 rounded-xl bg-white shadow-sm hidden"></div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Placeholders -->
+      <div id="content-team" class="tab-content py-20 text-center text-gray-400">Team content</div>
+      <div id="content-milestones" class="tab-content py-20 text-center text-gray-400">Milestones content</div>
+      <div id="content-github" class="tab-content py-20 text-center text-gray-400">Github content</div>
+
+    </div>
+  </div>
+
+  <script>
+    // --- APP STATE ---
+    let isLinked = false;
+    let analyticsPayload = null;
+    let selectedSprintId = null;
+    let selectedEpicFilter = 'ALL';
+    let jiraViewTab = 'sprint';
+
+    // --- INITIALIZATION (ON PAGE LOAD) ---
+    window.onload = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const authCode = urlParams.get('code');
+
+      if (authCode) {
+        // We got the code! Now fetch real data from our backend.
+        activateLinkedUI();
+        document.getElementById('demo-auth-banner').classList.remove('hidden');
+        document.getElementById('demo-code-display').innerText = "Fetching real data from Jira...";
+        setJiraLoading(true);
+        switchTab('jira');
+
+        // Remove code from URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+
+        try {
+            // Call our local Node.js backend
+            const response = await fetch('http://localhost:3000/api/get-jira-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ authCode: authCode })
+            });
+            const data = await response.json();
+
+	            if (data.success) {
+                document.getElementById('demo-code-display').innerText = "Real Data Loaded successfully!";
+	                renderAnalytics(data);
+                localStorage.setItem('jira_linked', 'true');
+	                localStorage.setItem('cached_jira_data', JSON.stringify(data));
+	            } else {
+	                throw new Error("Backend failed to get data");
+	            }
+        } catch (error) {
+            document.getElementById('demo-code-display').innerText = "Failed to load Jira data.";
+            setJiraError('Error fetching Jira data. Check backend logs for details.');
+            console.error(error);
+        } finally {
+            setJiraLoading(false);
+        }
+
+	      } else if (localStorage.getItem('jira_linked') === 'true') {
+	        activateLinkedUI();
+          setJiraLoading(true);
+          try {
+            const response = await fetch('http://localhost:3000/api/jira-cached-data');
+            const data = await response.json();
+            if (data.success) {
+              renderAnalytics(data);
+            } else {
+              throw new Error('No server cache');
+            }
+          } catch (error) {
+            const cachedData = JSON.parse(localStorage.getItem('cached_jira_data'));
+            if (cachedData) renderAnalytics(cachedData);
+            else setJiraError('No cached Jira analytics found. Re-link Jira to fetch fresh data.');
+          } finally {
+            setJiraLoading(false);
+          }
+	      }
+	    };
+
+	    // --- RENDER REAL DATA TO HTML ---
+      function renderAnalytics(data) {
+        analyticsPayload = data;
+        renderLinkedProjectName(data.board);
+        renderHeadline(data.insight);
+        renderProjectSummary(data);
+        renderSprintSelector(data.sprints || []);
+        renderSprintSummaries(data.sprints || []);
+        renderTeamWorkload(data.teamWorkload || []);
+        applySprintView();
+      }
+
+      function renderProjectSummary(data) {
+        const el = document.getElementById('overview-jira-analytics');
+        const sprints = data.sprints || [];
+        if (!sprints.length) {
+          el.classList.add('hidden');
+          el.innerHTML = '';
+          return;
+        }
+        const totalIssues = sprints.reduce((sum, sprint) => sum + (sprint.issueCount || 0), 0);
+        const totalDone = sprints.reduce((sum, sprint) => sum + (sprint.doneIssueCount || 0), 0);
+        const totalPoints = sprints.reduce((sum, sprint) => sum + (sprint.storyPointsTotal || 0), 0);
+        const donePoints = sprints.reduce((sum, sprint) => sum + (sprint.storyPointsDone || 0), 0);
+        const completion = totalPoints ? Math.round((donePoints / totalPoints) * 100) : (totalIssues ? Math.round((totalDone / totalIssues) * 100) : 0);
+        const activeSprint = sprints.find((sprint) => (sprint.state || '').toLowerCase() === 'active') || sprints[0];
+
+        el.innerHTML = `
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Project Analytics</p>
+              <h3 class="text-base font-semibold mt-1">${data.board?.name || 'Project'} • ${sprints.length} sprint(s)</h3>
+              <p class="text-sm text-gray-500 mt-1">Overall completion: ${completion}% (${totalDone}/${totalIssues} issues done, ${donePoints}/${totalPoints} story points).</p>
+              <p class="text-sm text-gray-500 mt-1">Active sprint: ${activeSprint?.name || 'N/A'} • ${activeSprint?.completionPercent || 0}% complete • ${activeSprint?.doneIssueCount || 0}/${activeSprint?.issueCount || 0} issues done.</p>
+            </div>
+            <div class="text-right text-xs text-gray-500">
+              <p>Last sync</p>
+              <p class="font-medium text-gray-700 mt-1">${data.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : 'N/A'}</p>
+            </div>
+          </div>
+        `;
+        el.classList.remove('hidden');
+      }
+
+      function renderLinkedProjectName(board) {
+        const nameEl = document.getElementById('jira-project-name');
+        if (!nameEl) return;
+        if (!board || !board.name) {
+          nameEl.innerText = 'Connected Jira Project';
+          return;
+        }
+        const typeLabel = board.type ? ` (${String(board.type).toUpperCase()})` : '';
+        nameEl.innerText = `${board.name}${typeLabel}`;
+      }
+
+      function renderSprintSelector(sprints) {
+        const selector = document.getElementById('sprint-selector');
+        if (!sprints.length) {
+          selector.classList.add('hidden');
+          selector.innerHTML = '';
+          selectedSprintId = null;
+          return;
+        }
+        selector.innerHTML = sprints.map((sprint) => `<option value="${sprint.id}">${sprint.name} (${(sprint.state || 'unknown').toUpperCase()})</option>`).join('');
+        const activeSprint = sprints.find((sprint) => (sprint.state || '').toLowerCase() === 'active');
+        selectedSprintId = String((activeSprint || sprints[0]).id);
+        selector.value = selectedSprintId;
+        selector.classList.remove('hidden');
+      }
+
+      function handleSprintSelection(sprintId) {
+        selectedSprintId = String(sprintId);
+        selectedEpicFilter = 'ALL';
+        applySprintView();
+      }
+
+      function applySprintView() {
+        if (!analyticsPayload) return;
+        const sprints = analyticsPayload.sprints || [];
+        const sprintIssueBuckets = analyticsPayload.sprintIssueBuckets || {};
+        const selectedSprint = sprints.find((sprint) => String(sprint.id) === String(selectedSprintId)) || sprints[0] || null;
+        const selectedIssues = selectedSprint
+          ? (sprintIssueBuckets[String(selectedSprint.id)] || [])
+          : (analyticsPayload.issues || []);
+        const selectedHierarchy = selectedSprint
+          ? (analyticsPayload.hierarchyBySprint || {})[String(selectedSprint.id)] || { epics: [] }
+          : { epics: [] };
+        renderMetricCards(selectedSprint || analyticsPayload.activeSprint);
+        renderStoryAnalysis(selectedSprint, selectedIssues);
+        renderEpicHierarchy(selectedHierarchy);
+        renderRealIssues(selectedIssues);
+        updateJiraViewVisibility();
+      }
+
+      function switchJiraViewTab(tabId) {
+        jiraViewTab = tabId === 'epic' ? 'epic' : 'sprint';
+        updateJiraViewVisibility();
+      }
+
+      function updateJiraViewVisibility() {
+        const sprintView = document.getElementById('jira-sprint-view');
+        const epicView = document.getElementById('jira-epic-view');
+        const sprintBtn = document.getElementById('jira-subtab-sprint');
+        const epicBtn = document.getElementById('jira-subtab-epic');
+
+        const showingEpic = jiraViewTab === 'epic';
+        sprintView.classList.toggle('hidden', showingEpic);
+        epicView.classList.toggle('hidden', !showingEpic);
+
+        sprintBtn.classList.toggle('border-b-2', !showingEpic);
+        sprintBtn.classList.toggle('border-black', !showingEpic);
+        sprintBtn.classList.toggle('text-black', !showingEpic);
+        sprintBtn.classList.toggle('text-gray-500', showingEpic);
+
+        epicBtn.classList.toggle('border-b-2', showingEpic);
+        epicBtn.classList.toggle('border-black', showingEpic);
+        epicBtn.classList.toggle('text-black', showingEpic);
+        epicBtn.classList.toggle('text-gray-500', !showingEpic);
+      }
+
+      function handleEpicFilter(epicKey) {
+        selectedEpicFilter = epicKey;
+        applySprintView();
+      }
+
+      function renderEpicHierarchy(hierarchy) {
+        const controlsEl = document.getElementById('hierarchy-controls');
+        const container = document.getElementById('epic-hierarchy-container');
+        const filterEl = document.getElementById('epic-filter-selector');
+        const allEpics = hierarchy?.epics || [];
+
+        if (!allEpics.length) {
+          controlsEl.classList.add('hidden');
+          container.classList.add('hidden');
+          container.innerHTML = '';
+          return;
+        }
+
+        controlsEl.classList.remove('hidden');
+        container.classList.remove('hidden');
+
+        filterEl.innerHTML = [
+          '<option value="ALL">All Epics</option>',
+          ...allEpics.map((epic) => `<option value="${epic.key}">${epic.title} (${epic.storyCount} stories)</option>`)
+        ].join('');
+        if (selectedEpicFilter !== 'ALL' && !allEpics.some((epic) => epic.key === selectedEpicFilter)) {
+          selectedEpicFilter = 'ALL';
+        }
+        filterEl.value = selectedEpicFilter;
+
+        const epics = selectedEpicFilter === 'ALL'
+          ? allEpics
+          : allEpics.filter((epic) => epic.key === selectedEpicFilter);
+
+        container.innerHTML = `
+          <div class="px-4 py-3 border-b border-gray-200">
+            <h3 class="font-semibold text-sm">Epic to Story/Subtask Breakdown</h3>
+          </div>
+          <div class="divide-y divide-gray-100">
+            ${epics.map((epic) => `
+              <details class="px-4 py-3" open>
+                <summary class="cursor-pointer list-none flex items-center justify-between">
+                  <div>
+                    <p class="font-semibold text-sm text-gray-900">${epic.title}</p>
+                    <p class="text-xs text-gray-500 mt-1">${epic.key} • ${epic.storyCount} stories • ${epic.subtaskCount} subtasks</p>
+                  </div>
+                  <span class="text-xs px-2 py-1 rounded-full border border-gray-200 bg-gray-50">${epic.status}</span>
+                </summary>
+                <div class="mt-3 space-y-2">
+                  ${epic.stories.map((story) => `
+                    <details class="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                      <summary class="cursor-pointer list-none flex items-center justify-between gap-4">
+                        <div>
+                          <p class="text-sm font-medium text-gray-900">${story.key} • ${story.title}</p>
+                          <p class="text-xs text-gray-500 mt-1">${story.type} • ${story.status} • ${story.assignee}</p>
+                        </div>
+                        <span class="text-xs text-gray-500">${story.subtasks?.length || 0} subtasks</span>
+                      </summary>
+                      <div class="mt-2 space-y-2">
+                        ${(story.subtasks || []).length
+                          ? story.subtasks.map((subtask) => `
+                              <div class="text-xs px-3 py-2 rounded border border-gray-200 bg-white flex items-center justify-between">
+                                <span>${subtask.key} • ${subtask.title}</span>
+                                <span class="text-gray-500">${subtask.status}</span>
+                              </div>
+                            `).join('')
+                          : '<div class="text-xs text-gray-500 px-1 py-1">No subtasks</div>'}
+                      </div>
+                    </details>
+                  `).join('')}
+                </div>
+              </details>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      function renderHeadline(text) {
+        const el = document.getElementById('jira-insight-headline');
+        if (!text) {
+          el.classList.add('hidden');
+          return;
+        }
+        el.innerText = text;
+        el.classList.remove('hidden');
+      }
+
+      function renderMetricCards(activeSprint) {
+        const grid = document.getElementById('jira-metrics-grid');
+        if (!activeSprint) {
+          grid.classList.add('hidden');
+          return;
+        }
+        document.getElementById('metric-sprint-name').innerText = activeSprint.name || '-';
+        document.getElementById('metric-completion').innerText = `${activeSprint.completionPercent || 0}%`;
+        document.getElementById('metric-done').innerText = `${activeSprint.doneIssueCount || 0} / ${activeSprint.issueCount || 0}`;
+        document.getElementById('metric-points').innerText = `${activeSprint.storyPointsDone || 0} / ${activeSprint.storyPointsTotal || 0}`;
+        grid.classList.remove('hidden');
+      }
+
+      function renderStoryAnalysis(sprint, issues) {
+        const card = document.getElementById('story-analysis-card');
+        if (!sprint) {
+          card.classList.add('hidden');
+          card.innerHTML = '';
+          return;
+        }
+        const total = issues.length;
+        const done = issues.filter((issue) => ['done', 'closed', 'resolved'].includes((issue.status || '').toLowerCase())).length;
+        const inProgress = issues.filter((issue) => ['in progress', 'selected for development', 'in development'].includes((issue.status || '').toLowerCase())).length;
+        const todo = Math.max(total - done - inProgress, 0);
+        const progress = total ? Math.round((done / total) * 100) : 0;
+        const topStatuses = Object.entries(sprint.statusCounts || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+        card.innerHTML = `
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Story-Level Analysis</p>
+              <h3 class="text-base font-semibold mt-1">${sprint.name}</h3>
+              <p class="text-sm text-gray-500 mt-1">Status progress: ${progress}% complete (${done}/${total} done), ${inProgress} in progress, ${todo} pending.</p>
+            </div>
+            <div class="text-right text-xs text-gray-500">
+              <p>${sprint.startDate} - ${sprint.endDate}</p>
+              <p class="uppercase mt-1">${sprint.state || 'unknown'}</p>
+            </div>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            ${topStatuses.map(([name, count]) => `<span class="px-2 py-1 text-xs rounded-full border border-gray-200 bg-gray-50">${name}: ${count}</span>`).join('')}
+          </div>
+        `;
+        card.classList.remove('hidden');
+      }
+
+      function renderSprintSummaries(sprints) {
+        const container = document.getElementById('sprints-container');
+        if (!sprints.length) {
+          container.classList.add('hidden');
+          return;
+        }
+        container.classList.remove('hidden');
+        container.innerHTML = `
+          <div class="px-4 py-3 border-b border-gray-200">
+            <h3 class="font-semibold text-sm">Recent Sprint Summaries</h3>
+          </div>
+          <div class="divide-y divide-gray-100">
+            ${sprints.map((sprint) => `
+              <div class="px-4 py-3 flex items-center justify-between text-sm">
+                <div>
+                  <p class="font-medium text-gray-900">${sprint.name} <span class="uppercase text-[10px] text-gray-500">(${sprint.state})</span></p>
+                  <p class="text-xs text-gray-500">${sprint.startDate} - ${sprint.endDate}</p>
+                </div>
+                <div class="text-right">
+                  <p class="font-semibold">${sprint.completionPercent}% complete</p>
+                  <p class="text-xs text-gray-500">${sprint.doneIssueCount}/${sprint.issueCount} issues • ${sprint.storyPointsDone}/${sprint.storyPointsTotal} pts</p>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+      function renderTeamWorkload(teamWorkload) {
+        const container = document.getElementById('team-workload-container');
+        if (!teamWorkload.length) {
+          container.classList.add('hidden');
+          return;
+        }
+        container.classList.remove('hidden');
+        container.innerHTML = `
+          <div class="px-4 py-3 border-b border-gray-200">
+            <h3 class="font-semibold text-sm">Team Workload by Story Points</h3>
+          </div>
+          <div class="divide-y divide-gray-100">
+            ${teamWorkload.map((member) => `
+              <div class="px-4 py-3 flex items-center justify-between text-sm">
+                <p class="font-medium text-gray-900">${member.name}</p>
+                <p class="font-semibold">${member.points} pts</p>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+
+	    function renderRealIssues(issues) {
+	        const container = document.getElementById('issues-container');
+	        container.innerHTML = ''; // Clear mock data
+	        setJiraError('');
+
+        if (!issues || issues.length === 0) {
+            container.innerHTML = '<div class="p-6 text-sm text-gray-500">No issues found for the current query.</div>';
+            return;
+        }
+
+        issues.forEach(issue => {
+            // Determine icon color based on type
+            let colorClass = 'bg-blue-500';
+            if(issue.type === 'Bug') colorClass = 'bg-red-500';
+            if(issue.type === 'Story') colorClass = 'bg-green-500';
+
+            // Create the HTML string for the real issue
+            const issueHTML = `
+            <div class="border-b border-gray-100 last:border-0 p-4 flex items-center justify-between hover:bg-gray-50">
+              <div class="flex items-center gap-4">
+                <div class="w-4 h-4 rounded-[3px] flex items-center justify-center text-[10px] font-bold text-white ${colorClass}">
+                    ${issue.type.charAt(0)}
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-gray-500">${issue.key}</span>
+                    <p class="text-sm font-medium text-gray-900">${issue.title}</p>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-1">Assignee: ${issue.assignee} • Last updated: ${issue.updated}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-[10px] font-bold px-2 py-1 rounded-full border uppercase tracking-wider w-24 text-center bg-gray-50 text-gray-600 border-gray-200">
+                  ${issue.status}
+                </span>
+              </div>
+            </div>`;
+            
+            container.innerHTML += issueHTML; // Inject into the page
+        });
+    }
+
+	    function setJiraLoading(isLoading) {
+	      const loadingEl = document.getElementById('jira-loading-state');
+	      const issuesEl = document.getElementById('issues-container');
+        const sprintsEl = document.getElementById('sprints-container');
+        const workloadEl = document.getElementById('team-workload-container');
+        const metricsEl = document.getElementById('jira-metrics-grid');
+        const insightEl = document.getElementById('jira-insight-headline');
+        const storyAnalysisEl = document.getElementById('story-analysis-card');
+        const sprintSelectorEl = document.getElementById('sprint-selector');
+        const hierarchyControlsEl = document.getElementById('hierarchy-controls');
+        const hierarchyEl = document.getElementById('epic-hierarchy-container');
+	      if (isLoading) {
+	        loadingEl.classList.remove('hidden');
+	        issuesEl.classList.add('hidden');
+          sprintsEl.classList.add('hidden');
+          workloadEl.classList.add('hidden');
+          metricsEl.classList.add('hidden');
+          insightEl.classList.add('hidden');
+          storyAnalysisEl.classList.add('hidden');
+          sprintSelectorEl.classList.add('hidden');
+          hierarchyControlsEl.classList.add('hidden');
+          hierarchyEl.classList.add('hidden');
+	      } else {
+	        loadingEl.classList.add('hidden');
+	        issuesEl.classList.remove('hidden');
+	      }
+	    }
+
+    function setJiraError(message) {
+      const errorEl = document.getElementById('jira-error-state');
+      if (!message) {
+        errorEl.classList.add('hidden');
+        errorEl.innerText = '';
+        return;
+      }
+      errorEl.innerText = message;
+      errorEl.classList.remove('hidden');
+    }
+
+    // --- BUTTON ACTIONS ---
+    async function handleLinkJira() {
+      document.getElementById('link-btn').innerText = "Redirecting...";
+      try {
+        const response = await fetch('http://localhost:3000/api/auth-url');
+        const data = await response.json();
+        if (!data.success || !data.url) {
+          throw new Error('Missing auth URL from backend');
+        }
+        window.location.href = data.url;
+      } catch (error) {
+        document.getElementById('link-btn').innerText = "Link Jira";
+        alert('Unable to start Jira OAuth. Check if backend is running with env config.');
+        console.error(error);
+      }
+    }
+
+    function handleUnlinkJira() {
+      localStorage.removeItem('jira_linked');
+      localStorage.removeItem('cached_jira_data');
+      isLinked = false;
+      document.getElementById('unlinked-state').classList.remove('hidden');
+      document.getElementById('linked-state').classList.add('hidden');
+      document.getElementById('jira-empty-state').classList.remove('hidden');
+      document.getElementById('jira-analytics-state').classList.add('hidden');
+      document.getElementById('jira-sparkle').classList.remove('hidden');
+      document.getElementById('demo-auth-banner').classList.add('hidden');
+      document.getElementById('issues-container').innerHTML = '';
+      document.getElementById('sprints-container').innerHTML = '';
+      document.getElementById('team-workload-container').innerHTML = '';
+      document.getElementById('jira-insight-headline').innerText = '';
+      document.getElementById('overview-jira-analytics').innerHTML = '';
+      document.getElementById('overview-jira-analytics').classList.add('hidden');
+      document.getElementById('jira-project-name').innerText = 'Sustain-Insight (SUS)';
+      document.getElementById('story-analysis-card').innerHTML = '';
+      document.getElementById('sprint-selector').innerHTML = '';
+      document.getElementById('epic-hierarchy-container').innerHTML = '';
+      document.getElementById('epic-filter-selector').innerHTML = '';
+      document.getElementById('hierarchy-controls').classList.add('hidden');
+      analyticsPayload = null;
+      selectedSprintId = null;
+      selectedEpicFilter = 'ALL';
+      jiraViewTab = 'sprint';
+      updateJiraViewVisibility();
+      setJiraError('');
+      switchTab('overview'); 
+    }
+
+    // --- UI HELPERS ---
+    function activateLinkedUI() {
+      isLinked = true;
+      document.getElementById('unlinked-state').classList.add('hidden');
+      document.getElementById('linked-state').classList.remove('hidden');
+      document.getElementById('jira-empty-state').classList.add('hidden');
+      document.getElementById('jira-analytics-state').classList.remove('hidden');
+      document.getElementById('jira-sparkle').classList.add('hidden');
+      document.getElementById('tab-jira').classList.remove('text-blue-500', 'hover:text-blue-700');
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.getElementById(`content-${tabId}`).classList.add('active');
+
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('border-b-2', 'border-black', 'text-black');
+        if (btn.id === 'tab-jira' && !isLinked) {
+          btn.classList.add('text-blue-500', 'hover:text-blue-700');
+        } else {
+          btn.classList.add('text-gray-500', 'hover:text-gray-700');
+        }
+      });
+      document.getElementById(`tab-${tabId}`).classList.add('border-b-2', 'border-black', 'text-black');
+    }
+</script>
+</body>
+</html>

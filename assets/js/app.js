@@ -772,8 +772,9 @@
       title: "",
       batch: "2026",
       semester: "Semester 1",
-      milestoneDate: "",
       studentIds: [],
+      leaderStudentId: "",
+      milestones: [{ title: "", dueDate: "", description: "" }],
       githubUrl: "",
       jiraProjectKey: "",
       jiraBoardLink: "",
@@ -790,33 +791,50 @@
         '<div class="meta">Need requirement confirmation before setup? Open the BA checklist.</div>' +
         '<button class="btn small ghost" id="wizard-ba-checklist">BA Checklist</button>' +
         '</div><div class="card wizard-shell">';
-      html += '<div class="wizard-steps"><span class="wizard-step ' + (step === 1 ? "active" : "") + '">Step 1: Basic Info</span><span class="wizard-step ' + (step === 2 ? "active" : "") + '">Step 2: Connections</span></div>';
+      html += '<div class="wizard-steps"><span class="wizard-step ' + (step === 1 ? "active" : "") + '">Step 1: Basics</span><span class="wizard-step ' + (step === 2 ? "active" : "") + '">Step 2: Team</span><span class="wizard-step ' + (step === 3 ? "active" : "") + '">Step 3: Milestones & Access</span></div>';
       if (step === 1) {
-        html += '<div class="wizard-section"><h3>Project Basics</h3><div class="meta">Capture the core identity and delivery timeline.</div><div class="form-grid">' +
+        html += '<div class="wizard-section"><h3>Project Basics</h3><div class="meta">Capture the core identity fields used by the current FE/BE flow.</div><div class="form-grid">' +
           '<div class="full"><label>Project Title *</label><input id="w-title" placeholder="e.g., Smart Attendance Tracker" value="' + UI.escapeHtml(data.title) + '"/></div>' +
           '<div><label>Batch</label><input id="w-batch" value="' + UI.escapeHtml(data.batch) + '"/></div>' +
           '<div><label>Semester</label><input id="w-sem" value="' + UI.escapeHtml(data.semester) + '"/></div>' +
-          '<div><label>Next Milestone Date *</label><input id="w-milestone" type="date" value="' + UI.escapeHtml(data.milestoneDate) + '"/></div>' +
-          '</div></div>' +
-          '<div class="wizard-section"><div class="row wrap" style="justify-content:space-between"><h3 style="margin:0">Team Assignment</h3><div class="meta" id="w-student-count">' + selectedStudentCount() + ' selected</div></div><div class="meta">Choose at least one student to continue.</div><div class="wizard-students">' +
+          "</div></div>";
+      } else if (step === 2) {
+        html += '<div class="wizard-section"><div class="row wrap" style="justify-content:space-between"><h3 style="margin:0">Team Assignment</h3><div class="meta" id="w-student-count">' + selectedStudentCount() + ' selected</div></div><div class="meta">Choose students, then optionally select one as project leader.</div><div class="wizard-students">' +
           students.map(function (s) {
             var checked = data.studentIds.indexOf(s.id) > -1 ? "checked" : "";
             return '<label class="student-pick"><input type="checkbox" data-student="' + s.id + '" ' + checked + '/><span>' + UI.escapeHtml(s.name) + "</span></label>";
           }).join("") +
-          "</div></div>";
+          '</div><div style="margin-top:12px"><label>Project Leader (optional)</label><select id="w-leader"><option value="">No leader selected</option>' +
+          students.filter(function (s) {
+            return data.studentIds.indexOf(s.id) > -1;
+          }).map(function (s) {
+            var selected = data.leaderStudentId === s.id ? "selected" : "";
+            return '<option value="' + s.id + '" ' + selected + '>' + UI.escapeHtml(s.name) + '</option>';
+          }).join("") +
+          '</select></div></div>';
       } else {
-        html += '<div class="wizard-section"><h3>Communication & Integrations</h3><div class="meta">Configure collaboration channel first, then optional tooling links.</div><div class="form-grid">' +
+        html += '<div class="wizard-section"><h3>Milestones</h3><div class="meta">Define at least one milestone. Project milestone date is derived from the earliest due date.</div>' +
+          data.milestones.map(function (m, idx) {
+            return '<div class="card" style="margin-top:10px"><div class="row wrap" style="justify-content:space-between"><strong>Milestone ' + (idx + 1) + '</strong>' + (data.milestones.length > 1 ? '<button class="btn small ghost" data-remove-ms="' + idx + '">Remove</button>' : '') + '</div>' +
+              '<div class="form-grid" style="margin-top:8px">' +
+              '<div><label>Title *</label><input data-ms-title="' + idx + '" value="' + UI.escapeHtml(m.title) + '" /></div>' +
+              '<div><label>Due Date *</label><input type="date" data-ms-date="' + idx + '" value="' + UI.escapeHtml(m.dueDate) + '" /></div>' +
+              '<div class="full"><label>Description</label><input data-ms-desc="' + idx + '" value="' + UI.escapeHtml(m.description) + '" /></div>' +
+              '</div></div>';
+          }).join("") +
+          '<div style="margin-top:10px"><button class="btn small" id="add-milestone">Add Milestone</button></div></div>' +
+          '<div class="wizard-section"><h3>Communication & Integrations</h3><div class="meta">Aligning with FE/BE GitHub access workflow: setup/access first, then explicit repository link.</div><div class="form-grid">' +
           '<div class="full"><label>Communication Link * (Teams/Discord/WhatsApp)</label><input id="w-comms" placeholder="https://teams.microsoft.com/..." value="' + UI.escapeHtml(data.commsLink) + '"/></div>' +
-          '<div class="full"><label>GitHub Repo URL</label><input id="w-gh" placeholder="https://github.com/org/repo" value="' + UI.escapeHtml(data.githubUrl) + '"/></div>' +
+          '<div class="full"><label>GitHub Repository URL (optional explicit link)</label><input id="w-gh" placeholder="https://github.com/org/repo" value="' + UI.escapeHtml(data.githubUrl) + '"/></div>' +
           '<div><label>Jira Project Key</label><input id="w-jira" placeholder="ABC" value="' + UI.escapeHtml(data.jiraProjectKey) + '"/></div>' +
           '<div><label>Jira Board Link (optional)</label><input id="w-jira-board" placeholder="https://jira.example.com/boards/123" value="' + UI.escapeHtml(data.jiraBoardLink) + '"/></div>' +
           "</div></div>";
       }
       html += '<div class="wizard-footer row wrap" style="justify-content:flex-end;margin-top:14px">';
-      if (step === 2) {
+      if (step > 1) {
         html += '<button class="btn" id="wizard-back">Back</button>';
       }
-      html += '<button class="btn primary" id="wizard-next">' + (step === 1 ? "Continue" : "Create Project") + "</button></div></div>";
+      html += '<button class="btn primary" id="wizard-next">' + (step < 3 ? "Continue" : "Create Project") + "</button></div></div>";
 
       renderLayout(html);
       bindWizardEvents();
@@ -829,21 +847,40 @@
           data.title = el("w-title").value.trim();
           data.batch = el("w-batch").value.trim() || "2026";
           data.semester = el("w-sem").value.trim() || "Semester 1";
-          data.milestoneDate = el("w-milestone").value;
-          data.studentIds = Array.prototype.slice.call(document.querySelectorAll("[data-student]:checked")).map(function (c) {
-            return c.getAttribute("data-student");
-          });
-          if (!data.title || !data.milestoneDate || !data.studentIds.length) {
+          if (!data.title) {
             UI.toast("Please fill required fields in Step 1");
             return;
           }
           step = 2;
           screen();
+        } else if (step === 2) {
+          data.studentIds = Array.prototype.slice.call(document.querySelectorAll("[data-student]:checked")).map(function (c) {
+            return c.getAttribute("data-student");
+          });
+          data.leaderStudentId = el("w-leader") ? el("w-leader").value : "";
+          if (!data.studentIds.length) {
+            UI.toast("Select at least one student in Step 2");
+            return;
+          }
+          step = 3;
+          screen();
         } else {
+          data.milestones = data.milestones.map(function (m, idx) {
+            return {
+              title: (el('ms-title-' + idx) ? el('ms-title-' + idx).value : (document.querySelector('[data-ms-title="' + idx + '"]') || {}).value || "").trim(),
+              dueDate: (el('ms-date-' + idx) ? el('ms-date-' + idx).value : (document.querySelector('[data-ms-date="' + idx + '"]') || {}).value || "").trim(),
+              description: (el('ms-desc-' + idx) ? el('ms-desc-' + idx).value : (document.querySelector('[data-ms-desc="' + idx + '"]') || {}).value || "").trim()
+            };
+          });
           data.commsLink = el("w-comms").value.trim();
           data.githubUrl = el("w-gh").value.trim();
           data.jiraProjectKey = el("w-jira").value.trim().toUpperCase();
           data.jiraBoardLink = el("w-jira-board").value.trim();
+          var invalidMilestone = data.milestones.some(function (m) { return !m.title || !m.dueDate; });
+          if (invalidMilestone || !data.milestones.length) {
+            UI.toast("Add at least one complete milestone (title + due date)");
+            return;
+          }
           if (!data.commsLink) {
             UI.toast("Communication link is required");
             return;
@@ -863,17 +900,57 @@
           if (countNode) {
             countNode.textContent = data.studentIds.length + " selected";
           }
+          if (step === 2) {
+            data.leaderStudentId = data.studentIds.indexOf(data.leaderStudentId) > -1 ? data.leaderStudentId : "";
+            screen();
+          }
+        });
+      });
+
+      var addMilestoneBtn = el("add-milestone");
+      if (addMilestoneBtn) {
+        addMilestoneBtn.addEventListener("click", function () {
+          data.milestones.push({ title: "", dueDate: "", description: "" });
+          screen();
+        });
+      }
+
+      document.querySelectorAll("[data-remove-ms]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var idx = Number(btn.getAttribute("data-remove-ms"));
+          data.milestones = data.milestones.filter(function (_, i) { return i !== idx; });
+          screen();
         });
       });
 
       var back = el("wizard-back");
       if (back) {
         back.addEventListener("click", function () {
-          data.commsLink = el("w-comms").value.trim();
-          data.githubUrl = el("w-gh").value.trim();
-          data.jiraProjectKey = el("w-jira").value.trim().toUpperCase();
-          data.jiraBoardLink = el("w-jira-board").value.trim();
-          step = 1;
+          if (step === 3) {
+            data.commsLink = el("w-comms").value.trim();
+            data.githubUrl = el("w-gh").value.trim();
+            data.jiraProjectKey = el("w-jira").value.trim().toUpperCase();
+            data.jiraBoardLink = el("w-jira-board").value.trim();
+            document.querySelectorAll("[data-ms-title]").forEach(function (node) {
+              var idx = Number(node.getAttribute("data-ms-title"));
+              data.milestones[idx].title = node.value.trim();
+            });
+            document.querySelectorAll("[data-ms-date]").forEach(function (node) {
+              var idx = Number(node.getAttribute("data-ms-date"));
+              data.milestones[idx].dueDate = node.value.trim();
+            });
+            document.querySelectorAll("[data-ms-desc]").forEach(function (node) {
+              var idx = Number(node.getAttribute("data-ms-desc"));
+              data.milestones[idx].description = node.value.trim();
+            });
+            step = 2;
+          } else {
+            data.studentIds = Array.prototype.slice.call(document.querySelectorAll("[data-student]:checked")).map(function (c) {
+              return c.getAttribute("data-student");
+            });
+            data.leaderStudentId = el("w-leader") ? el("w-leader").value : "";
+            step = 1;
+          }
           screen();
         });
       }
@@ -932,13 +1009,21 @@
     var tabBody = el("tab-body");
 
     if (currentTab === "overview") {
+      var leaderUser = project.leaderStudentId ? byId(students, project.leaderStudentId) : null;
+      var milestoneList = Array.isArray(project.milestones) ? project.milestones : [];
       tabBody.innerHTML = '<div class="split"><div class="card">' +
         '<h3 style="margin:0 0 10px">Project Info</h3>' +
-        '<div class="kv"><div>Batch</div><div>' + UI.escapeHtml(project.batch) + '</div><div>Semester</div><div>' + UI.escapeHtml(project.semester) + '</div><div>Milestone</div><div>' + UI.formatDate(project.milestoneDate) + ' <span class="meta">(' + UI.escapeHtml(milestoneDeltaText(project.milestoneDate)) + ')</span></div><div>Lifecycle</div><div>' + lifecycleBadge(project.lifecycleStatus) + (project.healthSuggestedStatus ? ' <span class="badge at-risk">Suggested ' + UI.escapeHtml(project.healthSuggestedStatus) + '</span>' : "") + '</div><div>Open Action Items</div><div>' + summary.openActionItems + '</div><div>Overdue</div><div>' + summary.overdueCount + '</div></div>' +
+        '<div class="kv"><div>Batch</div><div>' + UI.escapeHtml(project.batch) + '</div><div>Semester</div><div>' + UI.escapeHtml(project.semester) + '</div><div>Primary Milestone</div><div>' + UI.formatDate(project.milestoneDate) + ' <span class="meta">(' + UI.escapeHtml(milestoneDeltaText(project.milestoneDate)) + ')</span></div><div>Lifecycle</div><div>' + lifecycleBadge(project.lifecycleStatus) + (project.healthSuggestedStatus ? ' <span class="badge at-risk">Suggested ' + UI.escapeHtml(project.healthSuggestedStatus) + '</span>' : "") + '</div><div>Open Action Items</div><div>' + summary.openActionItems + '</div><div>Overdue</div><div>' + summary.overdueCount + '</div></div>' +
+        '<div style="margin-top:10px"><strong>Project Leader:</strong> ' + UI.escapeHtml(leaderUser ? leaderUser.name : "Not assigned") + '</div>' +
         '<h4>Members</h4><div class="row wrap">' + project.studentIds.map(function (sid) {
           var s = byId(students, sid);
           return '<span class="badge on-track">' + UI.escapeHtml(s ? s.name : sid) + '</span>';
         }).join("") + '</div>' +
+        '<h4 style="margin-top:12px">Milestones</h4>' +
+        (milestoneList.length ? '<div class="table-wrap"><table class="table"><thead><tr><th>#</th><th>Title</th><th>Due</th><th>Status</th></tr></thead><tbody>' +
+          milestoneList.map(function (m, idx) {
+            return '<tr><td>' + (m.sequenceNo || (idx + 1)) + '</td><td>' + UI.escapeHtml(m.title || ("Milestone " + (idx + 1))) + '</td><td>' + UI.formatDate(m.dueDate) + '</td><td><span class="badge">' + UI.escapeHtml(m.status || "PLANNED") + '</span></td></tr>';
+          }).join("") + '</tbody></table></div>' : '<div class="empty">No milestones configured.</div>') +
         (project.commsLink ? '<div style="margin-top:12px"><a class="btn primary" href="' + UI.escapeHtml(project.commsLink) + '" target="_blank" rel="noreferrer">Open Communication Channel</a></div>' : "") +
         (canEdit ? '<div style="margin-top:12px"><label class="meta">Transition Lifecycle</label><div class="row"><select id="project-status-next"><option>DRAFT</option><option>ACTIVE</option><option>AT_RISK</option><option>BEHIND</option><option>COMPLETED</option><option>ARCHIVED</option><option>CANCELLED</option></select><button class="btn small" id="project-status-apply">Apply</button></div></div>' : "") +
         '</div><div class="card"><h3 style="margin:0 0 10px">Integrations</h3>' +

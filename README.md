@@ -34,7 +34,10 @@ All accounts use password: `demo123`
   - Activity trend charts (canvas via vanilla JS)
   - Skeleton loading + integration warning states
 - Projects list with search and filters.
-- 2-step project creation wizard.
+- 3-step project creation wizard:
+  - basics
+  - team + optional leader
+  - multi-milestone planning + integrations
 - Project detail tabs:
   - Overview
   - Activity
@@ -43,6 +46,10 @@ All accounts use password: `demo123`
   - Files (metadata upload + simulated download)
 - Student home with assigned projects, due-soon action items, and recent meetings.
 - Toast notifications and modal dialogs.
+- Project model alignment with FE/BE updates:
+  - optional `leaderStudentId`
+  - `milestones[]` with per-item due dates/status
+  - primary `milestoneDate` derived from earliest milestone
 
 ## Simulated
 - GitHub and Jira integrations (configured/not configured states, mocked analytics).
