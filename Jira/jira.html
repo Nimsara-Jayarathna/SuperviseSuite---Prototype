@@ -125,10 +125,9 @@
 
           <div id="jira-error-state" class="hidden border border-red-200 bg-red-50 rounded-xl p-4 text-sm text-red-700"></div>
 
-          <div class="border-b border-gray-200">
-            <div class="flex gap-6 px-1">
-              <button id="jira-subtab-sprint" onclick="switchJiraViewTab('sprint')" class="py-2 text-sm font-medium border-b-2 border-black text-black">Sprint Level</button>
-              <button id="jira-subtab-epic" onclick="switchJiraViewTab('epic')" class="py-2 text-sm font-medium text-gray-500 hover:text-gray-700">Epic Level</button>
+          <div class="bg-gray-100 rounded-xl p-1 inline-flex gap-1">
+            <button id="jira-subtab-sprint" onclick="switchJiraViewTab('sprint')" class="px-4 py-2 rounded-lg text-sm font-medium bg-white text-black shadow-sm">Sprint Level</button>
+            <button id="jira-subtab-epic" onclick="switchJiraViewTab('epic')" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-800">Epic Level</button>
             </div>
           </div>
 
@@ -360,15 +359,33 @@
         sprintView.classList.toggle('hidden', showingEpic);
         epicView.classList.toggle('hidden', !showingEpic);
 
-        sprintBtn.classList.toggle('border-b-2', !showingEpic);
-        sprintBtn.classList.toggle('border-black', !showingEpic);
+        sprintBtn.classList.toggle('bg-white', !showingEpic);
+        sprintBtn.classList.toggle('shadow-sm', !showingEpic);
         sprintBtn.classList.toggle('text-black', !showingEpic);
-        sprintBtn.classList.toggle('text-gray-500', showingEpic);
+        sprintBtn.classList.toggle('text-gray-600', showingEpic);
 
-        epicBtn.classList.toggle('border-b-2', showingEpic);
-        epicBtn.classList.toggle('border-black', showingEpic);
+        epicBtn.classList.toggle('bg-white', showingEpic);
+        epicBtn.classList.toggle('shadow-sm', showingEpic);
         epicBtn.classList.toggle('text-black', showingEpic);
-        epicBtn.classList.toggle('text-gray-500', !showingEpic);
+        epicBtn.classList.toggle('text-gray-600', !showingEpic);
+      }
+
+      function getIssueTypeBadge(type, isSubtask) {
+        const lower = (type || '').toLowerCase();
+        if (isSubtask || lower.includes('sub')) return { label: 'Sub-task', cls: 'bg-teal-100 text-teal-700 border-teal-200' };
+        if (lower === 'epic') return { label: 'Epic', cls: 'bg-purple-100 text-purple-700 border-purple-200' };
+        if (lower === 'story') return { label: 'Story', cls: 'bg-green-100 text-green-700 border-green-200' };
+        if (lower === 'task') return { label: 'Task', cls: 'bg-blue-100 text-blue-700 border-blue-200' };
+        if (lower === 'bug') return { label: 'Bug', cls: 'bg-red-100 text-red-700 border-red-200' };
+        return { label: type || 'Issue', cls: 'bg-gray-100 text-gray-700 border-gray-200' };
+      }
+
+      function getSprintStateBadge(state) {
+        const s = (state || '').toLowerCase();
+        if (s === 'active') return 'bg-green-100 text-green-700 border-green-200';
+        if (s === 'closed') return 'bg-gray-100 text-gray-700 border-gray-200';
+        if (s === 'future') return 'bg-amber-100 text-amber-700 border-amber-200';
+        return 'bg-gray-100 text-gray-700 border-gray-200';
       }
 
       function handleEpicFilter(epicKey) {
@@ -423,19 +440,19 @@
                   ${epic.stories.map((story) => `
                     <details class="border border-gray-200 rounded-lg p-3 bg-gray-50">
                       <summary class="cursor-pointer list-none flex items-center justify-between gap-4">
-                        <div>
-                          <p class="text-sm font-medium text-gray-900">${story.key} • ${story.title}</p>
-                          <p class="text-xs text-gray-500 mt-1">${story.type} • ${story.status} • ${story.assignee}</p>
-                        </div>
+	                        <div>
+	                          <p class="text-sm font-medium text-gray-900">${story.key} • ${story.title}</p>
+	                          <p class="text-xs text-gray-500 mt-1"><span class="px-2 py-0.5 rounded-full border ${getIssueTypeBadge(story.type, story.isSubtask).cls}">${getIssueTypeBadge(story.type, story.isSubtask).label}</span> • ${story.status} • ${story.assignee}</p>
+	                        </div>
                         <span class="text-xs text-gray-500">${story.subtasks?.length || 0} subtasks</span>
                       </summary>
                       <div class="mt-2 space-y-2">
                         ${(story.subtasks || []).length
-                          ? story.subtasks.map((subtask) => `
-                              <div class="text-xs px-3 py-2 rounded border border-gray-200 bg-white flex items-center justify-between">
-                                <span>${subtask.key} • ${subtask.title}</span>
-                                <span class="text-gray-500">${subtask.status}</span>
-                              </div>
+	                          ? story.subtasks.map((subtask) => `
+	                              <div class="text-xs px-3 py-2 rounded border border-gray-200 bg-white flex items-center justify-between">
+	                                <span><span class="px-2 py-0.5 mr-1 rounded-full border ${getIssueTypeBadge(subtask.type, subtask.isSubtask).cls}">${getIssueTypeBadge(subtask.type, subtask.isSubtask).label}</span>${subtask.key} • ${subtask.title}</span>
+	                                <span class="text-gray-500">${subtask.status}</span>
+	                              </div>
                             `).join('')
                           : '<div class="text-xs text-gray-500 px-1 py-1">No subtasks</div>'}
                       </div>
@@ -491,6 +508,7 @@
               <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Story-Level Analysis</p>
               <h3 class="text-base font-semibold mt-1">${sprint.name}</h3>
               <p class="text-sm text-gray-500 mt-1">Status progress: ${progress}% complete (${done}/${total} done), ${inProgress} in progress, ${todo} pending.</p>
+              <p class="text-sm text-gray-600 mt-1"><span class="font-medium">Sprint goal:</span> ${sprint.goal && sprint.goal.trim() ? sprint.goal : 'No sprint goal defined.'}</p>
             </div>
             <div class="text-right text-xs text-gray-500">
               <p>${sprint.startDate} - ${sprint.endDate}</p>
@@ -516,13 +534,14 @@
             <h3 class="font-semibold text-sm">Recent Sprint Summaries</h3>
           </div>
           <div class="divide-y divide-gray-100">
-            ${sprints.map((sprint) => `
-              <div class="px-4 py-3 flex items-center justify-between text-sm">
-                <div>
-                  <p class="font-medium text-gray-900">${sprint.name} <span class="uppercase text-[10px] text-gray-500">(${sprint.state})</span></p>
-                  <p class="text-xs text-gray-500">${sprint.startDate} - ${sprint.endDate}</p>
-                </div>
-                <div class="text-right">
+	            ${sprints.map((sprint) => `
+	              <div class="px-4 py-3 flex items-center justify-between text-sm">
+	                <div>
+	                  <p class="font-medium text-gray-900">${sprint.name} <span class="uppercase text-[10px] px-2 py-0.5 rounded-full border ${getSprintStateBadge(sprint.state)}">${sprint.state}</span></p>
+	                  <p class="text-xs text-gray-500">${sprint.startDate} - ${sprint.endDate}</p>
+                    <p class="text-xs text-gray-600 mt-1"><span class="font-medium">Goal:</span> ${sprint.goal && sprint.goal.trim() ? sprint.goal : 'No goal set'}</p>
+	                </div>
+	                <div class="text-right">
                   <p class="font-semibold">${sprint.completionPercent}% complete</p>
                   <p class="text-xs text-gray-500">${sprint.doneIssueCount}/${sprint.issueCount} issues • ${sprint.storyPointsDone}/${sprint.storyPointsTotal} pts</p>
                 </div>
@@ -564,24 +583,19 @@
             return;
         }
 
-        issues.forEach(issue => {
-            // Determine icon color based on type
-            let colorClass = 'bg-blue-500';
-            if(issue.type === 'Bug') colorClass = 'bg-red-500';
-            if(issue.type === 'Story') colorClass = 'bg-green-500';
+	        issues.forEach(issue => {
+            const typeBadge = getIssueTypeBadge(issue.type, issue.isSubtask);
 
-            // Create the HTML string for the real issue
-            const issueHTML = `
-            <div class="border-b border-gray-100 last:border-0 p-4 flex items-center justify-between hover:bg-gray-50">
-              <div class="flex items-center gap-4">
-                <div class="w-4 h-4 rounded-[3px] flex items-center justify-center text-[10px] font-bold text-white ${colorClass}">
-                    ${issue.type.charAt(0)}
-                </div>
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs font-bold text-gray-500">${issue.key}</span>
-                    <p class="text-sm font-medium text-gray-900">${issue.title}</p>
-                  </div>
+	            // Create the HTML string for the real issue
+	            const issueHTML = `
+	            <div class="border-b border-gray-100 last:border-0 p-4 flex items-center justify-between hover:bg-gray-50">
+	              <div class="flex items-center gap-4">
+	                <div>
+	                  <div class="flex items-center gap-2">
+	                    <span class="text-xs font-bold text-gray-500">${issue.key}</span>
+                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${typeBadge.cls}">${typeBadge.label}</span>
+	                    <p class="text-sm font-medium text-gray-900">${issue.title}</p>
+	                  </div>
                   <p class="text-xs text-gray-500 mt-1">Assignee: ${issue.assignee} • Last updated: ${issue.updated}</p>
                 </div>
               </div>

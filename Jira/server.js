@@ -144,6 +144,7 @@ function summarizeSprint(sprint, issues) {
         id: sprint.id,
         name: sprint.name,
         state: sprint.state,
+        goal: sprint.goal || '',
         startDate: toLocalDate(sprint.startDate),
         endDate: toLocalDate(sprint.endDate),
         issueCount: issues.length,
@@ -164,12 +165,18 @@ function formatIssue(issue) {
     const epicLink = issue.fields?.customfield_10014 || issue.fields?.customfield_10008 || null;
 
     let epicKey = null;
+    let epicName = null;
     if (issueTypeName.toLowerCase() === 'epic') {
         epicKey = issue.key;
+        epicName = issue.fields?.summary || issue.key;
     } else if (parent?.fields?.issuetype?.name?.toLowerCase() === 'epic') {
         epicKey = parent.key;
+        epicName = parent?.fields?.summary || parent.key;
     } else if (typeof epicLink === 'string' && epicLink.trim()) {
         epicKey = epicLink.trim();
+    } else if (epicLink && typeof epicLink === 'object') {
+        epicKey = epicLink.key || epicLink.id || null;
+        epicName = epicLink.name || epicLink.value || null;
     }
 
     return {
@@ -180,6 +187,7 @@ function formatIssue(issue) {
         parentKey: parent?.key || null,
         parentTitle: parent?.fields?.summary || null,
         epicKey,
+        epicName,
         status: issue.fields?.status?.name || 'Unknown',
         assignee: issue.fields?.assignee?.displayName || 'Unassigned',
         updated: toLocalDate(issue.fields?.updated)
@@ -216,6 +224,9 @@ function buildHierarchyFromIssues(issues) {
         }
         if (!issue.isSubtask) {
             const epic = getOrCreateEpic(issue.epicKey);
+            if (issue.epicName && epic.title.startsWith('Epic ')) {
+                epic.title = issue.epicName;
+            }
             const story = { ...issue, subtasks: [] };
             epic.stories.push(story);
             storyMap.set(issue.key, story);
