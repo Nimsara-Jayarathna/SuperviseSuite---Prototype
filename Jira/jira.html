@@ -128,7 +128,6 @@
           <div class="bg-gray-100 rounded-xl p-1 inline-flex gap-1">
             <button id="jira-subtab-sprint" onclick="switchJiraViewTab('sprint')" class="px-4 py-2 rounded-lg text-sm font-medium bg-white text-black shadow-sm">Sprint Level</button>
             <button id="jira-subtab-epic" onclick="switchJiraViewTab('epic')" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-800">Epic Level</button>
-            </div>
           </div>
 
           <div id="jira-sprint-view" class="space-y-6">
@@ -386,6 +385,11 @@
         if (s === 'closed') return 'bg-gray-100 text-gray-700 border-gray-200';
         if (s === 'future') return 'bg-amber-100 text-amber-700 border-amber-200';
         return 'bg-gray-100 text-gray-700 border-gray-200';
+      }
+
+      function renderIssueTypePill(badge, extraClass = '') {
+        const safe = badge || { label: 'Issue', cls: 'bg-gray-100 text-gray-700 border-gray-200' };
+        return `<span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${safe.cls} ${extraClass}"><span>${safe.label}</span></span>`;
       }
 
       function handleEpicFilter(epicKey) {

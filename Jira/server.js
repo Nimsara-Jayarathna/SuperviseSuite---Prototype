@@ -60,11 +60,37 @@ function writeCache(payload) {
     }
 }
 
+function logAxiosError(context, error, extra = {}) {
+    const status = error?.response?.status || null;
+    const responseData = error?.response?.data || null;
+    const method = error?.config?.method ? String(error.config.method).toUpperCase() : null;
+    const url = error?.config?.url || null;
+
+    console.error('[JIRA_API_DEBUG]', {
+        context,
+        method,
+        url,
+        status,
+        message: error?.message || 'Unknown error',
+        responseData,
+        ...extra
+    });
+}
+
 function toLocalDate(dateString) {
     if (!dateString) return 'N/A';
     const parsed = new Date(dateString);
     if (Number.isNaN(parsed.getTime())) return 'N/A';
     return parsed.toLocaleDateString();
+}
+
+function extractDocumentText(node) {
+    if (!node) return '';
+    if (typeof node === 'string') return node;
+    if (Array.isArray(node)) return node.map(extractDocumentText).join(' ').trim();
+    const text = node.text ? String(node.text) : '';
+    const contentText = node.content ? extractDocumentText(node.content) : '';
+    return `${text} ${contentText}`.trim();
 }
 
 function getStoryPoints(issue) {
@@ -87,6 +113,15 @@ async function getCloudId(accessToken) {
     if (!cloudResponse.data || !cloudResponse.data.length) {
         throw new Error('No accessible Jira resources found for this user.');
     }
+    const resourcesWithScopes = cloudResponse.data.map((resource) => ({
+        id: resource.id,
+        name: resource.name,
+        scopes: resource.scopes || []
+    }));
+    console.error('[JIRA_API_DEBUG]', JSON.stringify({
+        context: 'accessible_resources_scopes',
+        resources: resourcesWithScopes
+    }, null, 2));
     return cloudResponse.data[0].id;
 }
 
@@ -108,7 +143,7 @@ async function getRecentSprints(baseUrl, headers, boardId) {
 async function getSprintIssues(baseUrl, headers, sprintId) {
     const params = new URLSearchParams({
         maxResults: '100',
-        fields: 'summary,status,issuetype,assignee,updated,created,resolutiondate'
+        fields: 'summary,status,issuetype,assignee,updated,created,resolutiondate,parent,priority,reporter,labels,description,customfield_10014,customfield_10008'
     });
     const response = await axios.get(`${baseUrl}/rest/agile/1.0/sprint/${sprintId}/issue?${params.toString()}`, { headers });
     return response.data.issues || [];
@@ -190,7 +225,12 @@ function formatIssue(issue) {
         epicName,
         status: issue.fields?.status?.name || 'Unknown',
         assignee: issue.fields?.assignee?.displayName || 'Unassigned',
-        updated: toLocalDate(issue.fields?.updated)
+        reporter: issue.fields?.reporter?.displayName || 'Unknown',
+        priority: issue.fields?.priority?.name || 'Unspecified',
+        labels: issue.fields?.labels || [],
+        created: toLocalDate(issue.fields?.created),
+        updated: toLocalDate(issue.fields?.updated),
+        description: extractDocumentText(issue.fields?.description) || 'No description.'
     };
 }
 
@@ -372,8 +412,26 @@ async function getIssueSearchFallbackPayload(baseUrl, headers) {
 // 1. Endpoint to exchange the code for Jira Data
 app.post('/api/get-jira-data', async (req, res) => {
     const { authCode } = req.body;
+    console.error('[JIRA_API_DEBUG]', {
+        context: 'get_jira_data_request_received',
+        hasBody: Boolean(req.body),
+        bodyKeys: req.body ? Object.keys(req.body) : [],
+        hasAuthCode: Boolean(authCode),
+        authCodeLength: typeof authCode === 'string' ? authCode.length : 0
+    });
 
     try {
+        if (!authCode || typeof authCode !== 'string') {
+            console.error('[JIRA_API_DEBUG]', {
+                context: 'get_jira_data_invalid_request',
+                reason: 'Missing or invalid authCode in request body'
+            });
+            return res.status(400).json({
+                success: false,
+                error: 'Missing authCode in request body'
+            });
+        }
+
         // Step A: Exchange Auth Code for Access Token
         const tokenResponse = await axios.post('https://auth.atlassian.com/oauth/token', {
             grant_type: 'authorization_code',
@@ -431,15 +489,29 @@ app.post('/api/get-jira-data', async (req, res) => {
             };
         } catch (agileError) {
             const agileDetails = agileError.response?.data || agileError.message;
+            logAxiosError('agile_api_fallback', agileError, {
+                fallback: 'jira_search',
+                configuredScope: ATLASSIAN_SCOPE
+            });
             console.warn('Agile API unavailable. Falling back to Jira search analytics.', agileDetails);
             payload = await getIssueSearchFallbackPayload(baseUrl, headers);
         }
 
         writeCache(payload);
+        console.error('[JIRA_API_DEBUG]', {
+            context: 'get_jira_data_success',
+            board: payload.board?.name || null,
+            sprintCount: Array.isArray(payload.sprints) ? payload.sprints.length : 0,
+            issueCount: Array.isArray(payload.issues) ? payload.issues.length : 0,
+            fetchedAt: payload.fetchedAt || null
+        });
         res.json({ success: true, ...payload });
 
     } catch (error) {
         const jiraError = error.response ? error.response.data : error.message;
+        logAxiosError('get_jira_data_failed', error, {
+            configuredScope: ATLASSIAN_SCOPE
+        });
         console.error("Jira API Error:", jiraError);
         res.status(500).json({ success: false, error: 'Failed to fetch real Jira data', details: jiraError });
     }
