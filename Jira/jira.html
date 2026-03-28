@@ -9,6 +9,18 @@
     /* Smooth transitions for tabs */
     .tab-content { display: none; }
     .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+    .truncate-2 {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .truncate-3 {
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(5px); }
       to { opacity: 1; transform: translateY(0); }
@@ -179,6 +191,25 @@
     </div>
   </div>
 
+  <div id="issue-detail-modal" class="hidden fixed inset-0 z-50">
+    <div class="absolute inset-0 bg-black/40" onclick="closeIssueModal()"></div>
+    <div class="relative max-w-2xl mx-auto mt-16 bg-white rounded-xl border border-gray-200 shadow-xl p-5">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <p id="modal-issue-key" class="text-xs font-bold text-gray-500"></p>
+          <h3 id="modal-issue-title" class="text-lg font-semibold text-gray-900 mt-1"></h3>
+        </div>
+        <button onclick="closeIssueModal()" class="text-sm text-gray-500 hover:text-gray-700">Close</button>
+      </div>
+      <div id="modal-issue-meta" class="mt-3 text-sm text-gray-600"></div>
+      <div id="modal-issue-relations" class="mt-3 text-sm text-gray-600"></div>
+      <div class="mt-4 border border-gray-200 rounded-lg p-3 bg-gray-50">
+        <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Description</p>
+        <p id="modal-issue-description" class="text-sm text-gray-700 whitespace-pre-wrap"></p>
+      </div>
+    </div>
+  </div>
+
   <script>
     // --- APP STATE ---
     let isLinked = false;
@@ -186,6 +217,8 @@
     let selectedSprintId = null;
     let selectedEpicFilter = 'ALL';
     let jiraViewTab = 'sprint';
+    let currentIssueMap = {};
+    let currentEpicMap = {};
 
     // --- INITIALIZATION (ON PAGE LOAD) ---
     window.onload = async () => {
@@ -333,14 +366,54 @@
         const selectedIssues = selectedSprint
           ? (sprintIssueBuckets[String(selectedSprint.id)] || [])
           : (analyticsPayload.issues || []);
+        currentIssueMap = Object.fromEntries((selectedIssues || []).map((issue) => [issue.key, issue]));
         const selectedHierarchy = selectedSprint
           ? (analyticsPayload.hierarchyBySprint || {})[String(selectedSprint.id)] || { epics: [] }
           : { epics: [] };
+        currentEpicMap = Object.fromEntries((selectedHierarchy.epics || []).map((epic) => [epic.key, epic]));
         renderMetricCards(selectedSprint || analyticsPayload.activeSprint);
         renderStoryAnalysis(selectedSprint, selectedIssues);
         renderEpicHierarchy(selectedHierarchy);
         renderRealIssues(selectedIssues);
         updateJiraViewVisibility();
+      }
+
+      function openIssueModal(issueKey) {
+        const issue = currentIssueMap[issueKey];
+        if (!issue) return;
+        document.getElementById('modal-issue-key').innerText = `${issue.key} • ${issue.type || 'Issue'}`;
+        document.getElementById('modal-issue-title').innerText = issue.title || '(No title)';
+        document.getElementById('modal-issue-meta').innerHTML = `
+          <span class="font-medium">Status:</span> ${issue.status || 'Unknown'} •
+          <span class="font-medium">Assignee:</span> ${issue.assignee || 'Unassigned'} •
+          <span class="font-medium">Priority:</span> ${issue.priority || 'Unspecified'} •
+          <span class="font-medium">Reporter:</span> ${issue.reporter || 'Unknown'}
+        `;
+        const relationParts = [];
+        if (issue.epicKey) relationParts.push(`<span class="font-medium">Belongs to Epic:</span> ${issue.epicName || issue.epicKey}`);
+        if (issue.parentKey) relationParts.push(`<span class="font-medium">Parent:</span> ${issue.parentKey}${issue.parentTitle ? ` • ${issue.parentTitle}` : ''}`);
+        document.getElementById('modal-issue-relations').innerHTML = relationParts.length ? relationParts.join(' • ') : '<span class="text-gray-500">No relationships found.</span>';
+        document.getElementById('modal-issue-description').innerText = issue.description || 'No description.';
+        document.getElementById('issue-detail-modal').classList.remove('hidden');
+      }
+
+      function openEpicModal(epicKey) {
+        const epic = currentEpicMap[epicKey];
+        if (!epic) return;
+        document.getElementById('modal-issue-key').innerText = `${epic.key} • Epic`;
+        document.getElementById('modal-issue-title').innerText = epic.title || epic.key;
+        document.getElementById('modal-issue-meta').innerHTML = `
+          <span class="font-medium">Status:</span> ${epic.status || 'Unspecified'} •
+          <span class="font-medium">Stories:</span> ${epic.storyCount || 0} •
+          <span class="font-medium">Subtasks:</span> ${epic.subtaskCount || 0}
+        `;
+        document.getElementById('modal-issue-relations').innerHTML = '<span class="font-medium">Type:</span> Epic';
+        document.getElementById('modal-issue-description').innerText = 'Epic-level summary for selected sprint.';
+        document.getElementById('issue-detail-modal').classList.remove('hidden');
+      }
+
+      function closeIssueModal() {
+        document.getElementById('issue-detail-modal').classList.add('hidden');
       }
 
       function switchJiraViewTab(tabId) {
@@ -445,8 +518,9 @@
                     <details class="border border-gray-200 rounded-lg p-3 bg-gray-50">
                       <summary class="cursor-pointer list-none flex items-center justify-between gap-4">
 	                        <div>
-	                          <p class="text-sm font-medium text-gray-900">${story.key} • ${story.title}</p>
+	                          <p class="text-sm font-medium text-gray-900"><button type="button" onclick="openIssueModal('${story.key}')" class="text-left hover:underline truncate-2">${story.key} • ${story.title}</button></p>
 	                          <p class="text-xs text-gray-500 mt-1"><span class="px-2 py-0.5 rounded-full border ${getIssueTypeBadge(story.type, story.isSubtask).cls}">${getIssueTypeBadge(story.type, story.isSubtask).label}</span> • ${story.status} • ${story.assignee}</p>
+                            <p class="text-xs text-gray-500 mt-1"><button type="button" onclick="openEpicModal('${epic.key}')" class="px-2 py-0.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100">Epic: ${epic.title}</button></p>
 	                        </div>
                         <span class="text-xs text-gray-500">${story.subtasks?.length || 0} subtasks</span>
                       </summary>
@@ -454,7 +528,7 @@
                         ${(story.subtasks || []).length
 	                          ? story.subtasks.map((subtask) => `
 	                              <div class="text-xs px-3 py-2 rounded border border-gray-200 bg-white flex items-center justify-between">
-	                                <span><span class="px-2 py-0.5 mr-1 rounded-full border ${getIssueTypeBadge(subtask.type, subtask.isSubtask).cls}">${getIssueTypeBadge(subtask.type, subtask.isSubtask).label}</span>${subtask.key} • ${subtask.title}</span>
+	                                <span><button type="button" onclick="openIssueModal('${subtask.key}')" class="text-left hover:underline"><span class="px-2 py-0.5 mr-1 rounded-full border ${getIssueTypeBadge(subtask.type, subtask.isSubtask).cls}">${getIssueTypeBadge(subtask.type, subtask.isSubtask).label}</span>${subtask.key} • ${subtask.title}</button></span>
 	                                <span class="text-gray-500">${subtask.status}</span>
 	                              </div>
                             `).join('')
@@ -512,7 +586,7 @@
               <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Story-Level Analysis</p>
               <h3 class="text-base font-semibold mt-1">${sprint.name}</h3>
               <p class="text-sm text-gray-500 mt-1">Status progress: ${progress}% complete (${done}/${total} done), ${inProgress} in progress, ${todo} pending.</p>
-              <p class="text-sm text-gray-600 mt-1"><span class="font-medium">Sprint goal:</span> ${sprint.goal && sprint.goal.trim() ? sprint.goal : 'No sprint goal defined.'}</p>
+              <p class="text-sm text-gray-600 mt-1 truncate-3"><span class="font-medium">Sprint goal:</span> ${sprint.goal && sprint.goal.trim() ? sprint.goal : 'No sprint goal defined.'}</p>
             </div>
             <div class="text-right text-xs text-gray-500">
               <p>${sprint.startDate} - ${sprint.endDate}</p>
@@ -543,7 +617,7 @@
 	                <div>
 	                  <p class="font-medium text-gray-900">${sprint.name} <span class="uppercase text-[10px] px-2 py-0.5 rounded-full border ${getSprintStateBadge(sprint.state)}">${sprint.state}</span></p>
 	                  <p class="text-xs text-gray-500">${sprint.startDate} - ${sprint.endDate}</p>
-                    <p class="text-xs text-gray-600 mt-1"><span class="font-medium">Goal:</span> ${sprint.goal && sprint.goal.trim() ? sprint.goal : 'No goal set'}</p>
+                    <p class="text-xs text-gray-600 mt-1 truncate-2"><span class="font-medium">Goal:</span> ${sprint.goal && sprint.goal.trim() ? sprint.goal : 'No goal set'}</p>
 	                </div>
 	                <div class="text-right">
                   <p class="font-semibold">${sprint.completionPercent}% complete</p>
@@ -598,10 +672,11 @@
 	                  <div class="flex items-center gap-2">
 	                    <span class="text-xs font-bold text-gray-500">${issue.key}</span>
                       <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${typeBadge.cls}">${typeBadge.label}</span>
-	                    <p class="text-sm font-medium text-gray-900">${issue.title}</p>
+	                    <p class="text-sm font-medium text-gray-900 truncate-2"><button type="button" onclick="openIssueModal('${issue.key}')" class="text-left hover:underline">${issue.title}</button></p>
 	                  </div>
-                  <p class="text-xs text-gray-500 mt-1">Assignee: ${issue.assignee} • Last updated: ${issue.updated}</p>
-                </div>
+	                  <p class="text-xs text-gray-500 mt-1">Assignee: ${issue.assignee} • Last updated: ${issue.updated}</p>
+                    <p class="text-xs text-gray-500 mt-1">${issue.parentKey ? `Belongs to: ${issue.parentKey}` : (issue.epicKey ? `<button type="button" onclick="openEpicModal('${issue.epicKey}')" class="px-2 py-0.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100">Epic: ${issue.epicName || issue.epicKey}</button>` : 'No parent epic/task')}</p>
+	                </div>
               </div>
               <div class="flex items-center gap-3">
                 <span class="text-[10px] font-bold px-2 py-1 rounded-full border uppercase tracking-wider w-24 text-center bg-gray-50 text-gray-600 border-gray-200">
@@ -693,10 +768,13 @@
       document.getElementById('epic-filter-selector').innerHTML = '';
       document.getElementById('hierarchy-controls').classList.add('hidden');
       analyticsPayload = null;
+      currentIssueMap = {};
+      currentEpicMap = {};
       selectedSprintId = null;
       selectedEpicFilter = 'ALL';
       jiraViewTab = 'sprint';
       updateJiraViewVisibility();
+      closeIssueModal();
       setJiraError('');
       switchTab('overview'); 
     }
